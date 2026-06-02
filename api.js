@@ -1,6 +1,6 @@
 /**
  * api.js — 經濟部商工行政資料開放平臺 API 封裝
- * 
+ *
  * 主要 API 端點（不需要 API Key，但大量使用需申請 IP 白名單）：
  * https://data.gcis.nat.gov.tw/od/rule
  */
@@ -9,22 +9,14 @@ const GCIS_BASE = 'https://data.gcis.nat.gov.tw/od/data/api';
 
 // API UUID 對照表
 const API = {
-  // 公司基本資料（應用一：基本欄位）
-  COMPANY_BASIC_1: '5F64D864-61CB-4D0D-8AD9-492047CC1EA6',
-  // 公司基本資料（應用二：含資本額、設立日期等）
-  COMPANY_BASIC_2: 'F05D1060-7D57-4763-BDCE-0DAF5975AFE0',
-  // 公司基本資料（應用三：含所在地、營業項目）
-  COMPANY_BASIC_3: '236EE382-4942-41A9-BD03-CA0709025E7C',
-  // 公司關鍵字查詢
-  COMPANY_SEARCH: '6BBA2268-1367-4B42-9CCA-BC17499EBE8C',
-  // 公司董監事資料
+  COMPANY_BASIC_1:   '5F64D864-61CB-4D0D-8AD9-492047CC1EA6',
+  COMPANY_BASIC_2:   'F05D1060-7D57-4763-BDCE-0DAF5975AFE0',
+  COMPANY_BASIC_3:   '236EE382-4942-41A9-BD03-CA0709025E7C',
+  COMPANY_SEARCH:    '6BBA2268-1367-4B42-9CCA-BC17499EBE8C',
   COMPANY_DIRECTORS: '4E5F7653-1B91-4DDC-99D5-468530FAE396',
-  // 公司負責人查詢（用人名查公司）
   COMPANY_BY_PERSON: '4B61A0F1-458C-43F9-93F3-9FD6DA5E1B08',
-  // 統編查公司名稱
   COMPANY_NAME_BY_TAX: '9D17AE0D-09B5-4732-A8F4-81ADED04B679',
-  // 統編查分公司資料
-  BRANCHES_BY_TAX: 'FDB8D2C8-573D-4276-BFA4-8D3925ABE1CB',
+  BRANCHES_BY_TAX:   'FDB8D2C8-573D-4276-BFA4-8D3925ABE1CB',
 };
 
 // 公司狀態代碼對照
@@ -42,48 +34,53 @@ const COMPANY_STATUS = {
 };
 
 /**
- * 通用 fetch 函式（處理 CORS 與錯誤）
+ * 通用 fetch 函式 — 依序嘗試多個 CORS proxy，任一成功即回傳
  */
 async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
-  const targetUrl = `${GCIS_BASE}/${uuid}?$format=json&$filter=${encodeURIComponent(filterStr)}&$skip=${skip}&$top=${top}`;
+  const targetUrl =
+    `${GCIS_BASE}/${uuid}` +
+    `?$format=json` +
+    `&$filter=${encodeURIComponent(filterStr)}` +
+    `&$skip=${skip}` +
+    `&$top=${top}`;
 
   const proxies = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
     `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
     `https://proxy.cors.sh/${targetUrl}`,
+    `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
   ];
 
   let lastError;
   for (const proxyUrl of proxies) {
     try {
       const res = await fetch(proxyUrl, {
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+        signal: AbortSignal.timeout(10000), // 10 秒 timeout
       });
+
       if (!res.ok) continue;
-      const data = await res.json();
+
+      const text = await res.text();
+
+      // 平臺中文錯誤訊息
+      if (text.includes('非授權介接')) throw new Error('此 IP 尚未加入白名單，請向平臺申請介接授權。');
+      if (text.includes('超出本日最大介接次數')) throw new Error('今日 API 查詢次數已達上限，請明天再試。');
+      if (text.includes('資料庫維護中')) throw new Error('平臺資料庫維護中，請稍後再試。');
+
+      const data = JSON.parse(text);
       return Array.isArray(data) ? data : [];
     } catch (err) {
+      // 若是業務邏輯錯誤就直接拋出，不繼續嘗試下一個 proxy
+      if (err.message.includes('白名單') || err.message.includes('上限') || err.message.includes('維護')) {
+        throw err;
+      }
       lastError = err;
-      continue;
+      // 繼續嘗試下一個 proxy
     }
   }
-  throw new Error('所有 Proxy 均無法連線，請稍後再試。');
-}
 
-  if (!res.ok) {
-    const text = await res.text();
-    // 平臺有時回傳中文錯誤訊息
-    if (text.includes('非授權介接')) {
-      throw new Error('此 IP 尚未加入白名單，請向平臺申請介接授權。');
-    }
-    if (text.includes('超出本日最大介接次數')) {
-      throw new Error('今日 API 查詢次數已達上限，請明天再試。');
-    }
-    throw new Error(`API 回應錯誤 (${res.status})`);
-  }
-
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  throw new Error(`無法連線至資料來源，請稍後再試。(${lastError?.message || 'unknown'})`);
 }
 
 /**
@@ -115,12 +112,10 @@ async function searchCompanyByName(keyword, statusCode = '01', top = 20) {
 }
 
 /**
- * 搜尋所有狀態（包含非現役）
+ * 搜尋所有狀態（目前只查核准設立）
  */
 async function searchCompanyAll(keyword, top = 20) {
-  // 嘗試多種狀態，01 = 核准設立最常見
-  const results = await searchCompanyByName(keyword, '01', top);
-  return results;
+  return searchCompanyByName(keyword, '01', top);
 }
 
 /**
@@ -156,7 +151,7 @@ function getStatusLabel(code) {
 
 /**
  * 民國日期轉西元
- * @param {string} rocDate - 如 "1110101" (7碼) 或 "111/01/01"
+ * @param {string} rocDate - 如 "1110101" (7碼)
  */
 function rocToAD(rocDate) {
   if (!rocDate) return '';

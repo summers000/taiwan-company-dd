@@ -45,16 +45,30 @@ const COMPANY_STATUS = {
  * 通用 fetch 函式（處理 CORS 與錯誤）
  */
 async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
-  const proxyBase = 'https://corsproxy.io/?';
-  const url = new URL(proxyBase + encodeURIComponent(`${GCIS_BASE}/${uuid}`));
-  url.searchParams.set('$format', 'json');
-  url.searchParams.set('$filter', filterStr);
-  url.searchParams.set('$skip', skip);
-  url.searchParams.set('$top', top);
+  const targetUrl = `${GCIS_BASE}/${uuid}?$format=json&$filter=${encodeURIComponent(filterStr)}&$skip=${skip}&$top=${top}`;
 
-  const res = await fetch(url.toString(), {
-    headers: { 'Accept': 'application/json' }
-  });
+  const proxies = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+    `https://proxy.cors.sh/${targetUrl}`,
+  ];
+
+  let lastError;
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await fetch(proxyUrl, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+  }
+  throw new Error('所有 Proxy 均無法連線，請稍後再試。');
+}
 
   if (!res.ok) {
     const text = await res.text();

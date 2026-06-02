@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台灣公司盡職調查系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="grain-overlay"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo-block">
+        <span class="logo-badge">DD</span>
+        <div>
+          <h1 class="site-title">台灣公司盡職調查</h1>
+          <p class="site-subtitle">供應商關聯分析平台</p>
+        </div>
+      </div>
+      <div class="header-note">
+        資料來源：經濟部商工行政資料開放平臺
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Search Section -->
+    <section class="search-section">
+      <div class="search-container">
+        <div class="search-tabs">
+          <button class="tab-btn active" data-tab="company">公司名稱</button>
+          <button class="tab-btn" data-tab="tax">統一編號</button>
+          <button class="tab-btn" data-tab="person">負責人姓名</button>
+          <button class="tab-btn" data-tab="address">公司地址</button>
+        </div>
+
+        <div class="search-box">
+          <div class="search-input-row">
+            <input type="text" id="searchInput" class="search-input" placeholder="輸入公司名稱關鍵字..." autocomplete="off">
+            <button id="searchBtn" class="search-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              查詢
+            </button>
+          </div>
+          <div class="search-hint" id="searchHint">支援關鍵字模糊搜尋，例如：台積電、鴻海</div>
+        </div>
+
+        <!-- Search Results List -->
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+    </section>
+
+    <!-- Main Content: Company Card + Graph -->
+    <section class="content-section" id="contentSection" style="display:none">
+      <div class="content-grid">
+
+        <!-- Left: Company Info -->
+        <div class="info-panel">
+          <div class="panel-header">
+            <span class="panel-label">公司基本資料</span>
+            <button id="addToGraphBtn" class="btn-outline">+ 加入關聯圖</button>
+          </div>
+          <div id="companyCard" class="company-card"></div>
+
+          <!-- Directors -->
+          <div class="sub-panel" id="directorsPanel" style="display:none">
+            <div class="sub-panel-header">
+              <span class="sub-panel-label">董監事資料</span>
+              <span class="record-count" id="directorCount"></span>
+            </div>
+            <div id="directorsTable"></div>
+          </div>
+
+          <!-- Managers -->
+          <div class="sub-panel" id="managersPanel" style="display:none">
+            <div class="sub-panel-header">
+              <span class="sub-panel-label">經理人資料</span>
+              <span class="record-count" id="managerCount"></span>
+            </div>
+            <div id="managersTable"></div>
+          </div>
+
+          <!-- Branches -->
+          <div class="sub-panel" id="branchesPanel" style="display:none">
+            <div class="sub-panel-header">
+              <span class="sub-panel-label">分公司資料</span>
+              <span class="record-count" id="branchCount"></span>
+            </div>
+            <div id="branchesTable"></div>
+          </div>
+        </div>
+
+        <!-- Right: Relation Graph -->
+        <div class="graph-panel">
+          <div class="panel-header">
+            <span class="panel-label">關聯圖</span>
+            <div class="graph-controls">
+              <button id="clearGraphBtn" class="btn-ghost btn-sm">清除</button>
+              <button id="exportGraphBtn" class="btn-ghost btn-sm">匯出 PNG</button>
+            </div>
+          </div>
+          <div class="graph-legend">
+            <span class="legend-item"><span class="legend-dot company"></span>公司</span>
+            <span class="legend-item"><span class="legend-dot person"></span>人員</span>
+            <span class="legend-item"><span class="legend-dot address"></span>地址</span>
+          </div>
+          <div id="graphContainer" class="graph-container">
+            <div class="graph-empty" id="graphEmpty">
+              <div class="graph-empty-icon">◎</div>
+              <p>查詢公司後點擊「加入關聯圖」<br>即可建立關聯視覺化</p>
+            </div>
+            <canvas id="graphCanvas"></canvas>
+          </div>
+          <div class="graph-info" id="graphInfo"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+      <div class="loading-spinner"></div>
+      <p class="loading-text" id="loadingText">查詢中...</p>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="errorToast" class="error-toast hidden"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p>資料來源：<a href="https://data.gcis.nat.gov.tw" target="_blank" rel="noopener">經濟部商工行政資料開放平臺</a>　｜　使用前請詳閱平臺<a href="https://data.gcis.nat.gov.tw/main/terms" target="_blank" rel="noopener">使用規範</a></p>
+      <p class="footer-note">⚠ 本工具僅供參考，實際商業決策請以官方資料為準。API 使用需遵守平臺規定，大量查詢請向平臺申請 IP 白名單。</p>
+    </div>
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

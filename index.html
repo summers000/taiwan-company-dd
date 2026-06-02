@@ -6,7 +6,7 @@
   <title>台灣公司盡職調查系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="grain-overlay"></div>
@@ -61,7 +61,10 @@
         <div class="info-panel">
           <div class="panel-header">
             <span class="panel-label">公司基本資料</span>
-            <button id="addToGraphBtn" class="btn-outline">+ 加入關聯圖</button>
+            <div class="panel-actions">
+              <button id="addToGraphBtn" class="btn-outline">+ 加入關聯圖</button>
+              <button id="expandGraphBtn" class="btn-outline">自動展開關聯</button>
+            </div>
           </div>
           <div id="companyCard" class="company-card"></div>
 
@@ -137,8 +140,8 @@
     </div>
   </footer>
 
-  <script src="api.js"></script>
-  <script src="graph.js"></script>
-  <script src="app.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

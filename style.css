@@ -740,3 +740,18 @@ a:hover { text-decoration: underline; }
 }
 
 .fade-in { animation: fadeIn 0.3s ease forwards; }
+
+/* Added for graph expansion controls */
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-outline:disabled,
+.btn-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}

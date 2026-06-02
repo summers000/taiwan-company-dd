@@ -45,7 +45,8 @@ const COMPANY_STATUS = {
  * 通用 fetch 函式（處理 CORS 與錯誤）
  */
 async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
-  const url = new URL(`${GCIS_BASE}/${uuid}`);
+  const proxyBase = 'https://corsproxy.io/?';
+  const url = new URL(proxyBase + encodeURIComponent(`${GCIS_BASE}/${uuid}`));
   url.searchParams.set('$format', 'json');
   url.searchParams.set('$filter', filterStr);
   url.searchParams.set('$skip', skip);

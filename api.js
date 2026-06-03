@@ -1,9 +1,10 @@
 /**
  * api.js — 經濟部商工行政資料開放平臺 API 封裝
- * https://data.gcis.nat.gov.tw/od/rule
+ * 透過 Cloudflare Worker 中繼，解決 CORS 問題
  */
 
-const GCIS_BASE = 'https://data.gcis.nat.gov.tw/od/data/api';
+const GCIS_BASE   = 'https://data.gcis.nat.gov.tw/od/data/api';
+const CF_WORKER   = 'https://gcis-proxy.summers0309.workers.dev';
 
 const API = {
   COMPANY_BASIC_1:     '5F64D864-61CB-4D0D-8AD9-492047CC1EA6',
@@ -17,51 +18,47 @@ const API = {
 };
 
 const COMPANY_STATUS = {
-  '01': '核准設立', '02': '廢止', '03': '撤銷', '04': '解散',
+  '01': '核准設立', '02': '廢止',     '03': '撤銷',     '04': '解散',
   '05': '合併解散', '06': '裁定解散', '07': '命令解散',
-  '09': '撤回', '10': '核准遷出', '11': '依職權廢止',
+  '09': '撤回',     '10': '核准遷出', '11': '依職權廢止',
 };
 
-// ── CORS Proxy 輪替 ──
-const PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://proxy.cors.sh/${url}`,
-  url => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(url)}`,
-  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-];
-
-async function fetchWithProxy(targetUrl) {
-  let lastError;
-  for (const buildProxy of PROXIES) {
-    const proxyUrl = buildProxy(targetUrl);
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(proxyUrl, {
-        headers: { 'Accept': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) continue;
-      const text = await res.text();
-      if (!text || text.trim() === '') continue;
-      if (text.includes('非授權介接')) throw new Error('此 IP 尚未加入白名單。');
-      if (text.includes('超出本日最大介接次數')) throw new Error('今日 API 查詢次數已達上限。');
-      if (text.includes('資料庫維護中')) throw new Error('平臺資料庫維護中，請稍後再試。');
-      const data = JSON.parse(text);
-      return Array.isArray(data) ? data : [];
-    } catch (err) {
-      if (err.message.includes('白名單') || err.message.includes('上限') || err.message.includes('維護')) throw err;
-      lastError = err;
-    }
-  }
-  throw new Error(`無法連線至資料來源，請稍後再試。(${lastError?.message || 'unknown'})`);
-}
-
+// ── 核心請求函式（走 Cloudflare Worker）──
 async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
-  const targetUrl = `${GCIS_BASE}/${uuid}?$format=json&$filter=${encodeURIComponent(filterStr)}&$skip=${skip}&$top=${top}`;
-  return fetchWithProxy(targetUrl);
+  const targetUrl =
+    `${GCIS_BASE}/${uuid}` +
+    `?$format=json` +
+    `&$filter=${encodeURIComponent(filterStr)}` +
+    `&$skip=${skip}` +
+    `&$top=${top}`;
+
+  const proxyUrl = `${CF_WORKER}?url=${encodeURIComponent(targetUrl)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(proxyUrl, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const text = await res.text();
+    if (!text || text.trim() === '') return [];
+    if (text.includes('非授權介接'))       throw new Error('此 IP 尚未加入白名單。');
+    if (text.includes('超出本日最大介接次數')) throw new Error('今日 API 查詢次數已達上限。');
+    if (text.includes('資料庫維護中'))     throw new Error('平臺資料庫維護中，請稍後再試。');
+
+    const data = JSON.parse(text);
+    return Array.isArray(data) ? data : [];
+
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
 }
 
 // ── 公司資料 ──
@@ -74,13 +71,14 @@ async function fetchCompanyByTaxNo(taxNo) {
     gcisGet(API.COMPANY_BASIC_3, f),
   ]);
   const v = s => s.status === 'fulfilled' && s.value.length > 0 ? s.value[0] : {};
-  const base1 = v(r1), base2 = v(r2), base3 = v(r3);
-  if (!Object.keys(base1).length && !Object.keys(base2).length) return null;
-  return { ...base1, ...base2, ...base3 };
+  const b1 = v(r1), b2 = v(r2), b3 = v(r3);
+  if (!Object.keys(b1).length && !Object.keys(b2).length) return null;
+  return { ...b1, ...b2, ...b3 };
 }
 
 async function searchCompanyByName(keyword, statusCode = '01', top = 20) {
-  return gcisGet(API.COMPANY_SEARCH, `Company_Name like ${keyword} and Company_Status eq ${statusCode}`, 0, top);
+  return gcisGet(API.COMPANY_SEARCH,
+    `Company_Name like ${keyword} and Company_Status eq ${statusCode}`, 0, top);
 }
 
 async function searchCompanyAll(keyword, top = 20) {
@@ -93,26 +91,32 @@ async function searchCompaniesByPerson(name, top = 50) {
 
 /**
  * 查詢董監事資料
- * 官方欄位：
- *   Business_Accounting_NO, Seq_No, Title（職稱）, Name（姓名）,
- *   Sev_Date（就任日期）, Representative_Name（所代表法人）,
- *   Invest_Money（出資額）
+ * 官方欄位：Title（職稱）, Name（姓名）,
+ *           Representative_Name（所代表法人）, Invest_Money（出資額）
  */
 async function fetchDirectors(taxNo) {
-  const raw = await gcisGet(API.COMPANY_DIRECTORS, `Business_Accounting_NO eq ${taxNo}`, 0, 100);
-  // 正規化欄位，相容不同 proxy 可能的欄位名稱差異
+  const raw = await gcisGet(API.COMPANY_DIRECTORS,
+    `Business_Accounting_NO eq ${taxNo}`, 0, 100);
+
+  // 印出第一筆 debug（之後可移除）
+  if (raw.length > 0) {
+    console.log('[GCIS Directors] 第一筆欄位：', Object.keys(raw[0]));
+    console.log('[GCIS Directors] 第一筆資料：', raw[0]);
+  }
+
   return raw.map(d => ({
-    Title:               d.Title || d.Director_Title || d.Dup_Title || '',
-    Name:                d.Name  || d.Director_Name  || d.Dup_Name  || '',
-    Representative_Name: d.Representative_Name || d.Rep_Name || '',
-    Invest_Money:        d.Invest_Money || d.Out_In_Money || d.Capital || '',
-    Sev_Date:            d.Sev_Date || '',
+    Title:               d.Title               || d.Director_Title || d.Dup_Title  || '',
+    Name:                d.Name                || d.Director_Name  || d.Dup_Name   || '',
+    Representative_Name: d.Representative_Name || d.Rep_Name       || '',
+    Invest_Money:        d.Invest_Money        || d.Out_In_Money   || d.Capital    || '',
+    Sev_Date:            d.Sev_Date            || '',
     _raw: d,
   }));
 }
 
 async function fetchBranches(taxNo) {
-  return gcisGet(API.BRANCHES_BY_TAX, `Business_Accounting_NO eq ${taxNo}`, 0, 50);
+  return gcisGet(API.BRANCHES_BY_TAX,
+    `Business_Accounting_NO eq ${taxNo}`, 0, 50);
 }
 
 // ── 工具函式 ──

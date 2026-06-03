@@ -105,10 +105,10 @@ async function fetchDirectors(taxNo) {
   }
 
   return raw.map(d => ({
-    Title:               d.Title               || d.Director_Title || d.Dup_Title  || '',
-    Name:                d.Name                || d.Director_Name  || d.Dup_Name   || '',
-    Representative_Name: d.Representative_Name || d.Rep_Name       || '',
-    Invest_Money:        d.Invest_Money        || d.Out_In_Money   || d.Capital    || '',
+    Title:               d.Person_Position_Name || d.Title || d.Director_Title || '',
+    Name:                d.Person_Name          || d.Name  || d.Director_Name  || '',
+    Representative_Name: d.Juristic_Person_Name || d.Representative_Name || '',
+    Invest_Money:        d.Person_Shareholding  || d.Invest_Money || d.Out_In_Money || '',
     Sev_Date:            d.Sev_Date            || '',
     _raw: d,
   }));

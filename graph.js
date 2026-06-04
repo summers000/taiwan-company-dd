@@ -276,28 +276,28 @@ const Graph = (() => {
 
   // 計算圓圈內要顯示的文字行數
   function innerLines(label, type) {
-    // 地址節點固定顯示「地址」
     if (type === 'address') return ['地址'];
 
-    // 人員：按姓/名分行
     if (type === 'person') {
       const name = label.trim();
-      if (name.length <= 2) return [name];          // 兩字：一行
-      if (name.length === 3) return [name[0], name.substring(1)]; // 三字：姓/名
-      // 四字以上：前2/後2
-      return [name.substring(0,2), name.substring(2,4)];
+      if (name.length <= 2) return [name];           // 1-2字：一行
+      if (name.length === 3) return [name[0], name.substring(1)]; // 3字：姓1 / 名2
+      // 4字以上：前2後2（汪郭｜鼎松）
+      return [name.substring(0, 2), name.substring(2, 4)];
     }
 
-    // 公司 / 法人：去後綴，最多6字，每行3字
+    // 公司 / 法人：去後綴後依字數決定分行方式
     const stripped = label
       .replace(/股份有限公司$/, '')
       .replace(/有限公司$/, '')
       .replace(/股份公司$/, '')
       .replace(/公司$/, '')
       .trim();
-    if (stripped.length <= 3) return [stripped];
-    if (stripped.length <= 6) return [stripped.substring(0,3), stripped.substring(3)];
-    return [stripped.substring(0,3), stripped.substring(3,6)];
+    const len = stripped.length;
+    if (len <= 3) return [stripped];                          // 1-3字：一行
+    if (len === 4) return [stripped.substring(0,2), stripped.substring(2)]; // 4字：2+2
+    if (len === 5) return [stripped.substring(0,2), stripped.substring(2)]; // 5字：2+3
+    return [stripped.substring(0,3), stripped.substring(3,6)];              // 6字：3+3
   }
 
   function drawNode(n) {

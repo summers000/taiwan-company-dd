@@ -272,11 +272,33 @@ const Graph = (() => {
     ctx.restore();
   }
 
+  // 移除公司/法人後綴，取簡短名稱用於圓圈內顯示
+  function shortName(label, type) {
+    if (type === 'address') return '址';
+    // 去除常見公司後綴
+    const stripped = label
+      .replace(/股份有限公司$/, '')
+      .replace(/有限公司$/, '')
+      .replace(/股份公司$/, '')
+      .replace(/公司$/, '')
+      .trim();
+    // 圓圈內最多顯示 4 個字
+    if (stripped.length <= 4) return stripped;
+    return stripped.substring(0, 4);
+  }
+
   function drawNode(n) {
     const {sx,sy} = w2s(n.x, n.y);
     const cfg = NODE_CFG[n.type] || NODE_CFG.company;
     const r   = cfg.radius * Math.max(0.5, scale);
     const isH = n === hoveredNode;
+
+    // 圓圈內要顯示的文字
+    const innerText = shortName(n.label, n.type);
+    // 字數多就縮小字體
+    const innerLines = innerText.length <= 2 ? [innerText] :
+                       innerText.length <= 4 ? [innerText.substring(0,2), innerText.substring(2)] :
+                       [innerText.substring(0,2), innerText.substring(2,4)];
 
     ctx.save();
     if (isH) { ctx.shadowColor = cfg.color; ctx.shadowBlur = 18; }
@@ -290,14 +312,21 @@ const Graph = (() => {
     ctx.stroke();
     ctx.shadowBlur  = 0;
 
-    // Icon
-    const fs = Math.max(8, Math.round(11*scale));
-    ctx.font = `bold ${fs}px 'Noto Serif TC', serif`;
+    // 圓圈內文字
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(cfg.icon, sx, sy);
+    if (innerLines.length === 1) {
+      const fs = Math.max(7, Math.round(r * 0.5));
+      ctx.font = `bold ${fs}px 'Noto Serif TC', serif`;
+      ctx.fillText(innerLines[0], sx, sy);
+    } else {
+      const fs = Math.max(6, Math.round(r * 0.38));
+      ctx.font = `bold ${fs}px 'Noto Serif TC', serif`;
+      ctx.fillText(innerLines[0], sx, sy - fs * 0.6);
+      ctx.fillText(innerLines[1], sx, sy + fs * 0.6);
+    }
 
-    // Label
+    // 節點下方完整名稱（較長，最多12字）
     if (scale > 0.35) {
       const label = n.label.length > 12 ? n.label.substring(0,12)+'…' : n.label;
       const lfs   = Math.max(9, Math.round(11*scale));

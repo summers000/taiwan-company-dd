@@ -35,7 +35,7 @@ async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
   const proxyUrl = `${CF_WORKER}?url=${encodeURIComponent(targetUrl)}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort('timeout'), 20000);
 
   try {
     const res = await fetch(proxyUrl, {
@@ -57,6 +57,10 @@ async function gcisGet(uuid, filterStr, skip = 0, top = 50) {
 
   } catch (err) {
     clearTimeout(timer);
+    // AbortError = timeout, re-throw with clearer message
+    if (err.name === 'AbortError') {
+      throw new Error('查詢逾時，請稍後再試。');
+    }
     throw err;
   }
 }

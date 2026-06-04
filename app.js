@@ -148,27 +148,51 @@ async function loadCompaniesByPerson(name, showList = false) {
 
 /**
  * 自動擴展：查詢某人的所有公司並加入關聯圖
+ * 改為循序處理，避免同時大量請求造成 timeout
  */
 async function expandPersonInGraph(name, label) {
-  showLoading(`展開 ${label} 的關聯公司...`);
+  showLoading(`查詢 ${label} 的關聯公司...`);
   try {
     const companies = await GCISApi.searchCompaniesByPerson(name, 30);
-    showLoading(false);
     if (companies.length === 0) {
+      showLoading(false);
       showError(`找不到 ${label} 擔任負責人的其他公司。`);
       return;
     }
-    // 對每一間公司加入關聯圖（只加基本資料，不再遞迴）
+
+    const total = companies.length;
+    let done = 0;
+
     for (const c of companies) {
       const taxNo = c.Business_Accounting_NO;
-      if (!taxNo) continue;
-      setLoadingText(`載入 ${c.Company_Name || taxNo}...`);
+      if (!taxNo) { done++; continue; }
+
+      done++;
+      setLoadingText(`載入關聯公司 (${done}/${total})：${c.Company_Name || taxNo}`);
+
       try {
-        const detail = await GCISApi.fetchCompanyByTaxNo(taxNo);
-        const dirs = await GCISApi.fetchDirectors(taxNo).catch(() => []);
-        if (detail) Graph.addCompany(detail, dirs, []);
-      } catch (_) {}
+        // 先用搜尋結果的基本資料快速加入節點，再補董監事
+        const quickData = {
+          Business_Accounting_NO: c.Business_Accounting_NO,
+          Company_Name:           c.Company_Name,
+          Company_Status:         c.Company_Status,
+          Responsible_Name:       c.Responsible_Name,
+          Company_Location:       c.Company_Address || c.Company_Location || '',
+        };
+        Graph.addCompany(quickData, [], []);
+
+        // 再撈董監事（非同步補充，失敗不影響主流程）
+        GCISApi.fetchDirectors(taxNo).then(dirs => {
+          if (dirs.length > 0) Graph.addCompany(quickData, dirs, []);
+        }).catch(() => {});
+
+        // 每筆之間稍作間隔，避免打爆 API
+        await new Promise(r => setTimeout(r, 300));
+      } catch (e) {
+        // 單筆失敗繼續下一筆
+      }
     }
+
     showLoading(false);
   } catch (err) {
     showLoading(false);

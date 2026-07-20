@@ -6,6 +6,8 @@
   <title>台灣公司盡職調查系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <!-- SheetJS for Excel parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,108 +22,192 @@
           <p class="site-subtitle">供應商關聯分析平台</p>
         </div>
       </div>
-      <div class="header-note">
-        資料來源：經濟部商工行政資料開放平臺
-      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-page="search">單筆查詢</button>
+        <button class="nav-btn" data-page="batch">批次比對</button>
+      </nav>
+      <div class="header-note">資料來源：經濟部商工行政資料開放平臺</div>
     </div>
   </header>
 
   <main>
-    <!-- Search Section -->
-    <section class="search-section">
-      <div class="search-container">
-        <div class="search-tabs">
-          <button class="tab-btn active" data-tab="company">公司名稱</button>
-          <button class="tab-btn" data-tab="tax">統一編號</button>
-          <button class="tab-btn" data-tab="person">負責人姓名</button>
-          <button class="tab-btn" data-tab="address">公司地址</button>
-        </div>
 
-        <div class="search-box">
-          <div class="search-input-row">
-            <input type="text" id="searchInput" class="search-input" placeholder="輸入公司名稱關鍵字..." autocomplete="off">
-            <button id="searchBtn" class="search-btn">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              查詢
-            </button>
+    <!-- ══════════════════════════════
+         PAGE 1：單筆查詢
+    ══════════════════════════════ -->
+    <div id="page-search">
+
+      <section class="search-section">
+        <div class="search-container">
+          <div class="search-tabs">
+            <button class="tab-btn active" data-tab="company">公司名稱</button>
+            <button class="tab-btn" data-tab="tax">統一編號</button>
+            <button class="tab-btn" data-tab="person">負責人姓名</button>
+            <button class="tab-btn" data-tab="address">公司地址</button>
           </div>
-          <div class="search-hint" id="searchHint">支援關鍵字模糊搜尋，例如：台積電、鴻海</div>
+          <div class="search-box">
+            <div class="search-input-row">
+              <input type="text" id="searchInput" class="search-input" placeholder="輸入公司名稱關鍵字..." autocomplete="off">
+              <button id="searchBtn" class="search-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                查詢
+              </button>
+            </div>
+            <div class="search-hint" id="searchHint">支援關鍵字模糊搜尋，例如：台積電、鴻海</div>
+          </div>
+          <div id="searchResults" class="search-results hidden"></div>
         </div>
+      </section>
 
-        <!-- Search Results List -->
-        <div id="searchResults" class="search-results hidden"></div>
-      </div>
-    </section>
-
-    <!-- Main Content: Company Card + Graph -->
-    <section class="content-section" id="contentSection" style="display:none">
-      <div class="content-grid">
-
-        <!-- Left: Company Info -->
-        <div class="info-panel">
-          <div class="panel-header">
-            <span class="panel-label">公司基本資料</span>
-            <div class="panel-actions">
+      <section class="content-section" id="contentSection" style="display:none">
+        <div class="content-grid">
+          <div class="info-panel">
+            <div class="panel-header">
+              <span class="panel-label">公司基本資料</span>
               <button id="addToGraphBtn" class="btn-outline">+ 加入關聯圖</button>
-              <button id="expandGraphBtn" class="btn-outline">自動展開關聯</button>
+            </div>
+            <div id="companyCard" class="company-card"></div>
+            <div class="sub-panel" id="directorsPanel" style="display:none">
+              <div class="sub-panel-header">
+                <span class="sub-panel-label">董監事資料</span>
+                <span class="record-count" id="directorCount"></span>
+              </div>
+              <div id="directorsTable"></div>
+            </div>
+            <div class="sub-panel" id="managersPanel" style="display:none">
+              <div class="sub-panel-header">
+                <span class="sub-panel-label">經理人資料</span>
+                <span class="record-count" id="managerCount"></span>
+              </div>
+              <div id="managersTable"></div>
+            </div>
+            <div class="sub-panel" id="branchesPanel" style="display:none">
+              <div class="sub-panel-header">
+                <span class="sub-panel-label">分公司資料</span>
+                <span class="record-count" id="branchCount"></span>
+              </div>
+              <div id="branchesTable"></div>
             </div>
           </div>
-          <div id="companyCard" class="company-card"></div>
 
-          <!-- Directors -->
-          <div class="sub-panel" id="directorsPanel" style="display:none">
-            <div class="sub-panel-header">
-              <span class="sub-panel-label">董監事資料</span>
-              <span class="record-count" id="directorCount"></span>
+          <div class="graph-panel">
+            <div class="panel-header">
+              <span class="panel-label">關聯圖</span>
+              <div class="graph-controls">
+                <button id="clearGraphBtn" class="btn-ghost btn-sm">清除</button>
+                <button id="exportGraphBtn" class="btn-ghost btn-sm">匯出 PNG</button>
+              </div>
             </div>
-            <div id="directorsTable"></div>
-          </div>
-
-          <!-- Managers -->
-          <div class="sub-panel" id="managersPanel" style="display:none">
-            <div class="sub-panel-header">
-              <span class="sub-panel-label">經理人資料</span>
-              <span class="record-count" id="managerCount"></span>
+            <div class="graph-legend">
+              <span class="legend-item"><span class="legend-dot company"></span>公司</span>
+              <span class="legend-item"><span class="legend-dot person"></span>人員</span>
+              <span class="legend-item"><span class="legend-dot address"></span>地址</span>
             </div>
-            <div id="managersTable"></div>
-          </div>
-
-          <!-- Branches -->
-          <div class="sub-panel" id="branchesPanel" style="display:none">
-            <div class="sub-panel-header">
-              <span class="sub-panel-label">分公司資料</span>
-              <span class="record-count" id="branchCount"></span>
+            <div id="graphContainer" class="graph-container">
+              <div class="graph-empty" id="graphEmpty">
+                <div class="graph-empty-icon">◎</div>
+                <p>查詢公司後自動建立關聯圖<br>點擊人員節點可展開關聯公司</p>
+              </div>
+              <canvas id="graphCanvas"></canvas>
             </div>
-            <div id="branchesTable"></div>
+            <div class="graph-info" id="graphInfo"></div>
           </div>
         </div>
+      </section>
 
-        <!-- Right: Relation Graph -->
-        <div class="graph-panel">
-          <div class="panel-header">
-            <span class="panel-label">關聯圖</span>
-            <div class="graph-controls">
-              <button id="clearGraphBtn" class="btn-ghost btn-sm">清除</button>
-              <button id="exportGraphBtn" class="btn-ghost btn-sm">匯出 PNG</button>
+    </div><!-- /page-search -->
+
+
+    <!-- ══════════════════════════════
+         PAGE 2：批次比對
+    ══════════════════════════════ -->
+    <div id="page-batch" style="display:none">
+      <section class="batch-section">
+        <div class="batch-container">
+
+          <!-- 說明 -->
+          <div class="batch-intro">
+            <h2 class="batch-title">批次供應商比對</h2>
+            <p class="batch-desc">上傳含有統一編號、公司名稱或負責人姓名的 CSV 或 Excel 檔，系統會自動逐筆查詢並標註風險。</p>
+            <div class="batch-format-hint">
+              <span class="hint-label">支援欄位名稱</span>
+              <span class="hint-chip">統一編號 / 統編</span>
+              <span class="hint-chip">公司名稱 / 公司名</span>
+              <span class="hint-chip">負責人 / 代表人</span>
+              <span class="hint-chip">地址</span>
+            </div>
+            <a href="#" id="downloadTemplate" class="btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px">
+              ↓ 下載範本 CSV
+            </a>
+          </div>
+
+          <!-- 上傳區 -->
+          <div class="batch-drop-zone" id="batchDropZone">
+            <div class="drop-icon">📂</div>
+            <p class="drop-text">拖曳檔案到此處，或</p>
+            <label class="drop-btn">
+              選擇檔案
+              <input type="file" id="batchFileInput" accept=".csv,.xlsx,.xls" style="display:none">
+            </label>
+            <p class="drop-hint">支援 .csv / .xlsx / .xls</p>
+          </div>
+
+          <!-- 預覽 -->
+          <div id="batchPreviewSection" style="display:none">
+            <div class="batch-preview-bar">
+              <div class="preview-info">
+                <span class="preview-label">檔案</span>
+                <span id="batchFileName" class="preview-value"></span>
+                <span class="preview-label" style="margin-left:16px">筆數</span>
+                <span id="batchRowCount" class="preview-value"></span>
+                <span class="preview-label" style="margin-left:16px">偵測欄位</span>
+                <span id="batchDetected" class="preview-value"></span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <button id="batchRunBtn" class="search-btn" disabled>
+                  ▶ 開始比對
+                </button>
+                <button id="batchClearBtn" class="btn-ghost btn-sm">重置</button>
+              </div>
+            </div>
+
+            <!-- 進度條 -->
+            <div id="batchProgressBar" class="batch-progress" style="display:none">
+              <div id="batchProgressFill" class="batch-progress-fill"></div>
+            </div>
+            <p id="batchStatus" class="batch-status"></p>
+          </div>
+
+          <!-- 結果表格 -->
+          <div id="batchResultSection" style="display:none">
+            <div class="batch-result-header">
+              <span class="panel-label">比對結果</span>
+              <button id="batchExportBtn" class="btn-outline" style="display:none">↓ 匯出 CSV</button>
+            </div>
+            <div class="batch-table-wrap">
+              <table class="data-table batch-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>輸入值</th>
+                    <th>公司名稱</th>
+                    <th>統一編號</th>
+                    <th>狀態</th>
+                    <th>負責人</th>
+                    <th>設立日期</th>
+                    <th>資本額</th>
+                    <th>風險標註</th>
+                    <th>比對方式</th>
+                  </tr>
+                </thead>
+                <tbody id="batchResultBody"></tbody>
+              </table>
             </div>
           </div>
-          <div class="graph-legend">
-            <span class="legend-item"><span class="legend-dot company"></span>公司</span>
-            <span class="legend-item"><span class="legend-dot person"></span>人員</span>
-            <span class="legend-item"><span class="legend-dot address"></span>地址</span>
-          </div>
-          <div id="graphContainer" class="graph-container">
-            <div class="graph-empty" id="graphEmpty">
-              <div class="graph-empty-icon">◎</div>
-              <p>查詢公司後點擊「加入關聯圖」<br>即可建立關聯視覺化</p>
-            </div>
-            <canvas id="graphCanvas"></canvas>
-          </div>
-          <div class="graph-info" id="graphInfo"></div>
+
         </div>
-
-      </div>
-    </section>
+      </section>
+    </div><!-- /page-batch -->
 
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay hidden">
@@ -136,12 +222,39 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <p>資料來源：<a href="https://data.gcis.nat.gov.tw" target="_blank" rel="noopener">經濟部商工行政資料開放平臺</a>　｜　使用前請詳閱平臺<a href="https://data.gcis.nat.gov.tw/main/terms" target="_blank" rel="noopener">使用規範</a></p>
-      <p class="footer-note">⚠ 本工具僅供參考，實際商業決策請以官方資料為準。API 使用需遵守平臺規定，大量查詢請向平臺申請 IP 白名單。</p>
+      <p class="footer-note">⚠ 本工具僅供參考，實際商業決策請以官方資料為準。</p>
     </div>
   </footer>
 
   <script src="api.js"></script>
   <script src="graph.js"></script>
   <script src="app.js"></script>
+  <script src="batch.js"></script>
+  <script>
+    // ── 頁面切換 ──
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const page = btn.dataset.page;
+        document.getElementById('page-search').style.display = page === 'search' ? 'block' : 'none';
+        document.getElementById('page-batch').style.display  = page === 'batch'  ? 'block' : 'none';
+      });
+    });
+
+    // ── 下載範本 CSV ──
+    document.getElementById('downloadTemplate').addEventListener('click', e => {
+      e.preventDefault();
+      const csv = '\uFEFF統一編號,公司名稱,負責人,地址\n03522600,遠東新世紀股份有限公司,徐旭東,\n04541302,台灣積體電路製造股份有限公司,,\n';
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'DD比對範本.csv';
+      a.click();
+    });
+
+    // ── 初始化批次模組 ──
+    document.addEventListener('DOMContentLoaded', () => Batch.init());
+  </script>
 </body>
 </html>

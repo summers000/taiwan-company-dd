@@ -6,8 +6,13 @@
   <title>台灣公司盡職調查系統</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&family=Bebas+Neue&display=swap" rel="stylesheet">
-  <!-- SheetJS for Excel parsing -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- SheetJS：動態載入，支援 Excel 上傳 -->
+  <script>
+    var s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onerror=function(){console.warn("SheetJS 未載入，請將 Excel 另存為 CSV");};
+    document.head.appendChild(s);
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>

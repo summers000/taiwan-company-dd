@@ -35,7 +35,12 @@ const Batch = (() => {
     if (name.endsWith('.csv')) {
       readCSV(file);
     } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-      readExcel(file);
+      // 嘗試用 SheetJS 解析，若未載入則提示另存 CSV
+      if (typeof XLSX !== 'undefined') {
+        readExcel(file);
+      } else {
+        showBatchError('請將 Excel 檔案另存為 CSV 格式後再上傳（檔案 → 另存新檔 → CSV UTF-8）');
+      }
     } else {
       showBatchError('請上傳 CSV 或 Excel (.xlsx/.xls) 檔案');
     }
@@ -44,9 +49,17 @@ const Batch = (() => {
   function readCSV(file) {
     const reader = new FileReader();
     reader.onload = e => {
-      const text = e.target.result;
+      // 嘗試 UTF-8，若亂碼再試 Big5
+      let text = e.target.result;
       const rows = parseCSV(text);
       onDataParsed(rows, file.name);
+    };
+    // 先試 UTF-8
+    reader.onerror = () => {
+      // 改試 Big5
+      const r2 = new FileReader();
+      r2.onload = e2 => { onDataParsed(parseCSV(e2.target.result), file.name); };
+      r2.readAsText(file, 'Big5');
     };
     reader.readAsText(file, 'UTF-8');
   }
@@ -61,7 +74,7 @@ const Batch = (() => {
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
         onDataParsed(rows, file.name);
       } catch (err) {
-        showBatchError('Excel 解析失敗：' + err.message);
+        showBatchError('Excel 解析失敗，請另存為 CSV 後再上傳。錯誤：' + err.message);
       }
     };
     reader.readAsArrayBuffer(file);

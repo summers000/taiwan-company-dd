@@ -135,12 +135,16 @@
             <h2 class="batch-title">批次供應商比對</h2>
             <p class="batch-desc">上傳含有統一編號、公司名稱或負責人姓名的 CSV 或 Excel 檔，系統會自動逐筆查詢並標註風險。</p>
             <div class="batch-format-hint">
-              <span class="hint-label">支援欄位名稱</span>
-              <span class="hint-chip">統一編號 / 統編</span>
-              <span class="hint-chip">公司名稱 / 公司名</span>
-              <span class="hint-chip">負責人 / 代表人</span>
-              <span class="hint-chip">地址</span>
+              <span class="hint-label">必要欄位名稱（完全相符）</span>
+              <span class="hint-chip">統一編號</span>
+              <span class="hint-chip">公司名稱</span>
+              <span class="hint-chip">登記地址</span>
+              <span class="hint-chip">代表人</span>
+              <span class="hint-chip">國家（TW=台灣）</span>
             </div>
+            <p style="font-size:12px;color:var(--text-3);font-family:var(--font-mono);margin-top:8px">
+              ⚠ 欄位名稱需完全相符。國家欄填 TW 的才會查詢，其他國家自動略過。統一編號若遺失前導零會自動補回。
+            </p>
             <a href="#" id="downloadTemplate" class="btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px">
               ↓ 下載範本 CSV
             </a>
@@ -194,8 +198,9 @@
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>輸入值</th>
-                    <th>公司名稱</th>
+                    <th>輸入統編</th>
+                    <th>輸入公司名稱</th>
+                    <th>查到公司名稱</th>
                     <th>統一編號</th>
                     <th>狀態</th>
                     <th>負責人</th>

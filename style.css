@@ -390,9 +390,12 @@ a:hover { text-decoration: underline; }
 
 .batch-drop-zone {
   border: 2px dashed var(--border); border-radius: var(--radius);
-  background: var(--bg-2); padding: 48px 32px; text-align: center; transition: all 0.2s; cursor: pointer;
+  background: var(--bg-2); padding: 28px 32px; text-align: center; transition: all 0.2s; cursor: pointer;
 }
 .batch-drop-zone:hover { border-color: var(--border-accent); background: var(--bg-3); }
+.batch-drop-zone--compact { padding: 20px 24px; }
+.batch-drop-zone--compact .drop-icon { font-size: 24px; margin-bottom: 8px; }
+.batch-drop-zone--compact .drop-text { font-size: 13px; margin-bottom: 8px; }
 .drop-icon { font-size: 36px; margin-bottom: 12px; }
 .drop-text { font-size: 15px; color: var(--text-2); margin-bottom: 12px; }
 .drop-btn {
@@ -415,7 +418,11 @@ a:hover { text-decoration: underline; }
 .batch-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; width: 0%; }
 .batch-status { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); margin-top: 8px; min-height: 18px; }
 
-.batch-result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.batch-result-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+  position: sticky; top: 70px; z-index: 10;
+  background: var(--bg); padding: 8px 0;
+}
 .batch-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 .batch-table { min-width: 1000px; white-space: nowrap; }
 .batch-table td { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }

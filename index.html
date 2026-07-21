@@ -28,8 +28,8 @@
         </div>
       </div>
       <nav class="header-nav">
-        <button class="nav-btn active" data-page="search">單筆查詢</button>
-        <button class="nav-btn" data-page="batch">批次比對</button>
+        <button class="nav-btn active" data-page="search">公司基本資料查詢</button>
+        <button class="nav-btn" data-page="batch">正確性及重複性比對</button>
       </nav>
       <div class="header-note">資料來源：經濟部商工行政資料開放平臺</div>
     </div>
@@ -151,7 +151,7 @@
           </div>
 
           <!-- 上傳區 -->
-          <div class="batch-drop-zone" id="batchDropZone">
+          <div class="batch-drop-zone batch-drop-zone--compact" id="batchDropZone">
             <div class="drop-icon">📂</div>
             <p class="drop-text">拖曳檔案到此處，或</p>
             <label class="drop-btn">
@@ -190,7 +190,7 @@
           <div id="batchResultSection" style="display:none">
             <div class="batch-result-header">
               <span class="panel-label">比對結果</span>
-              <button id="batchExportBtn" class="btn-outline" style="display:none">↓ 匯出 CSV</button>
+              <button id="batchExportBtn" class="btn-outline" style="display:none">↓ 匯出 Excel</button>
             </div>
             <div class="batch-table-wrap">
               <table class="data-table batch-table">

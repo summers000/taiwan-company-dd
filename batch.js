@@ -192,7 +192,8 @@ const Batch = (() => {
   async function runBatch() {
     if (batchRows.length === 0) return;
     document.getElementById('batchRunBtn').disabled = true;
-    document.getElementById('batchExportBtn').style.display = 'none';
+    document.getElementById('batchExportBtn').style.display = 'inline-flex';
+    document.getElementById('batchExportBtn').disabled = true;
     batchResults = [];
 
     const total   = batchRows.length;
@@ -218,7 +219,7 @@ const Batch = (() => {
       `完成！${total} 筆　✓ 找到 ${found} 筆（含台灣公司網 ${twincn} 筆）　⚠ 風險 ${warn} 筆　✗ 查無 ${total-found} 筆`;
 
     document.getElementById('batchRunBtn').disabled = false;
-    document.getElementById('batchExportBtn').style.display = 'inline-flex';
+    document.getElementById('batchExportBtn').disabled = false;
     document.getElementById('batchResultSection').style.display = 'block';
   }
 

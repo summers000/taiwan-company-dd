@@ -64,6 +64,42 @@
         </div>
       </section>
 
+      <!-- 負責人查詢結果區塊 -->
+      <section class="content-section" id="personSection" style="display:none">
+        <div class="person-result-wrap">
+          <div class="panel-header" style="border-radius:6px 6px 0 0">
+            <div>
+              <span class="panel-label" id="personResultTitle">負責人查詢結果</span>
+              <span class="record-count" id="personResultCount" style="margin-left:12px"></span>
+            </div>
+            <button id="personAddAllBtn" class="btn-outline">+ 全部加入關聯圖</button>
+          </div>
+          <div id="personCompanyList" class="person-company-list"></div>
+        </div>
+        <div class="graph-panel" style="margin-top:24px">
+          <div class="panel-header">
+            <span class="panel-label">關聯圖</span>
+            <div class="graph-controls">
+              <button id="clearGraphBtn2" class="btn-ghost btn-sm">清除</button>
+              <button id="exportGraphBtn2" class="btn-ghost btn-sm">匯出 PNG</button>
+            </div>
+          </div>
+          <div class="graph-legend">
+            <span class="legend-item"><span class="legend-dot company"></span>公司</span>
+            <span class="legend-item"><span class="legend-dot person"></span>人員</span>
+            <span class="legend-item"><span class="legend-dot address"></span>地址</span>
+          </div>
+          <div id="graphContainer2" class="graph-container" style="height:480px">
+            <div class="graph-empty" id="graphEmpty2">
+              <div class="graph-empty-icon">◎</div>
+              <p>查詢後自動建立關聯圖</p>
+            </div>
+            <canvas id="graphCanvas2"></canvas>
+          </div>
+          <div class="graph-info" id="graphInfo2"></div>
+        </div>
+      </section>
+
       <section class="content-section" id="contentSection" style="display:none">
         <div class="content-grid">
           <div class="info-panel">

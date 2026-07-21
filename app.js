@@ -29,6 +29,7 @@ const errorToast     = $('errorToast');
 
 document.addEventListener('DOMContentLoaded', () => {
   Graph.init();
+  Graph2.init();
   setupSearchTabs();
   setupEventListeners();
 });
@@ -86,6 +87,12 @@ function setupEventListeners() {
   clearGraphBtn.addEventListener('click', () => Graph.clear());
   exportGraphBtn.addEventListener('click', () => Graph.exportPNG());
 
+  // Graph2 buttons (person result page)
+  const clearGraphBtn2  = document.getElementById('clearGraphBtn2');
+  const exportGraphBtn2 = document.getElementById('exportGraphBtn2');
+  if (clearGraphBtn2)  clearGraphBtn2.addEventListener('click',  () => Graph2.clear());
+  if (exportGraphBtn2) exportGraphBtn2.addEventListener('click', () => Graph2.exportPNG());
+
   // 點擊關聯圖節點
   document.getElementById('graphCanvas').addEventListener('nodeClick', async e => {
     const node = e.detail;
@@ -104,7 +111,7 @@ async function doSearch() {
   switch (currentSearchMode) {
     case 'company': await searchByCompanyName(query); break;
     case 'tax':     await loadCompanyByTax(query); break;
-    case 'person':  await loadCompaniesByPerson(query, true); break;
+    case 'person':  await loadCompaniesByPerson(query, true); break;  // showFullResult
     case 'address': showError('地址搜尋請先查到公司，再透過關聯圖查看同地址公司。'); break;
   }
 }
@@ -121,22 +128,19 @@ async function searchByCompanyName(keyword) {
   }
 }
 
-async function loadCompaniesByPerson(name, showList = false) {
+async function loadCompaniesByPerson(name, showFullResult = false) {
   showLoading(`查詢 ${name} 的相關公司...`);
   try {
-    const results = await GCISApi.searchCompaniesByPerson(name, 30);
+    const results = await GCISApi.searchCompaniesByPerson(name, 50);
     showLoading(false);
     if (results.length === 0) {
       showError(`找不到以「${name}」為負責人的公司。`);
       return [];
     }
-    if (showList) {
-      showResultList(results.map(r => ({
-        Company_Name: r.Company_Name,
-        Business_Accounting_NO: r.Business_Accounting_NO,
-        Company_Status: r.Company_Status,
-        Company_Location: r.Company_Address || '',
-      })));
+
+    if (showFullResult) {
+      // 負責人查詢模式：顯示完整列表 + 關聯圖
+      await renderPersonResults(name, results);
     }
     return results;
   } catch (err) {
@@ -144,6 +148,93 @@ async function loadCompaniesByPerson(name, showList = false) {
     showError(err.message);
     return [];
   }
+}
+
+/**
+ * 負責人查詢：渲染所有公司列表並建立關聯圖
+ */
+async function renderPersonResults(name, companies) {
+  const section   = $('personSection');
+  const listEl    = $('personCompanyList');
+  const titleEl   = $('personResultTitle');
+  const countEl   = $('personResultCount');
+  const addAllBtn = $('personAddAllBtn');
+
+  titleEl.textContent = `「${name}」擔任負責人的公司`;
+  countEl.textContent = `共 ${companies.length} 筆`;
+
+  // 渲染公司列表
+  listEl.innerHTML = companies.map(c => {
+    const status = c.Company_Status || '';
+    const badgeClass = status === '01' ? 'badge-active' : (status ? 'badge-inactive' : 'badge-unknown');
+    const statusLabel = GCISApi.getStatusLabel(status);
+    return `
+      <div class="person-company-item" data-tax="${escapeHtml(c.Business_Accounting_NO || '')}">
+        <div class="person-company-main">
+          <span class="person-company-name">${escapeHtml(c.Company_Name || '未知')}</span>
+          <span class="result-badge ${badgeClass}">${statusLabel}</span>
+        </div>
+        <div class="person-company-meta">
+          <span class="mono" style="color:var(--text-3)">${c.Business_Accounting_NO || ''}</span>
+          ${c.Company_Address || c.Company_Location ? `<span style="color:var(--text-3);margin-left:12px">${escapeHtml(c.Company_Address || c.Company_Location)}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  // 點擊列表項目 → 載入單一公司詳細資料
+  listEl.querySelectorAll('.person-company-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const tax = el.dataset.tax;
+      if (tax) {
+        section.style.display = 'none';
+        loadCompanyByTax(tax);
+      }
+    });
+  });
+
+  // 「全部加入關聯圖」按鈕
+  addAllBtn.onclick = async () => {
+    addAllBtn.disabled = true;
+    addAllBtn.textContent = '建立中...';
+    $('graphEmpty2').style.display = 'none';
+
+    // 先加入人員節點
+    const personNode = { Business_Accounting_NO: '__person__' + name, Company_Name: name, Responsible_Name: '' };
+
+    let done = 0;
+    for (const c of companies) {
+      done++;
+      const quickData = {
+        Business_Accounting_NO: c.Business_Accounting_NO,
+        Company_Name:           c.Company_Name,
+        Company_Status:         c.Company_Status,
+        Responsible_Name:       name,
+        Company_Location:       c.Company_Address || c.Company_Location || '',
+      };
+      Graph2.addCompany(quickData, [], []);
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    addAllBtn.textContent = `✓ 已加入 ${done} 家`;
+    setTimeout(() => { addAllBtn.disabled = false; addAllBtn.textContent = '+ 全部加入關聯圖'; }, 3000);
+  };
+
+  // 顯示區塊，隱藏單筆查詢區塊
+  $('contentSection').style.display = 'none';
+  section.style.display = 'block';
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // 自動建立關聯圖
+  $('graphEmpty2').style.display = 'none';
+  companies.forEach(c => {
+    Graph2.addCompany({
+      Business_Accounting_NO: c.Business_Accounting_NO,
+      Company_Name:           c.Company_Name,
+      Company_Status:         c.Company_Status,
+      Responsible_Name:       name,
+      Company_Location:       c.Company_Address || c.Company_Location || '',
+    }, [], []);
+  });
 }
 
 /**

@@ -434,3 +434,32 @@ a:hover { text-decoration: underline; }
 }
 .risk-ok { font-family: var(--font-mono); font-size: 12px; color: var(--green); }
 .mono { font-family: var(--font-mono); }
+
+/* ===========================
+   Person Result Section
+   =========================== */
+.person-result-wrap {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; margin-bottom: 24px;
+}
+
+.person-company-list {
+  max-height: 400px; overflow-y: auto;
+}
+
+.person-company-item {
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.15s;
+}
+.person-company-item:last-child { border-bottom: none; }
+.person-company-item:hover { background: var(--bg-3); }
+
+.person-company-main {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+}
+.person-company-name {
+  font-size: 14px; font-weight: 600; color: var(--text);
+}
+.person-company-meta {
+  font-size: 12px; font-family: var(--font-mono);
+}

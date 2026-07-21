@@ -31,7 +31,7 @@
         <button class="nav-btn active" data-page="search">公司基本資料查詢</button>
         <button class="nav-btn" data-page="batch">正確性及重複性比對</button>
       </nav>
-      <div class="header-note">資料來源：經濟部商工行政資料開放平臺</div>
+      <div class="header-note">官方公司資料＋人工查核紀錄</div>
     </div>
   </header>
 
@@ -72,7 +72,7 @@
               <span class="panel-label" id="personResultTitle">負責人查詢結果</span>
               <span class="record-count" id="personResultCount" style="margin-left:12px"></span>
             </div>
-            <button id="personAddAllBtn" class="btn-outline">+ 全部加入關聯圖</button>
+            <button id="personAddAllBtn" class="btn-outline">↻ 重建關聯圖</button>
           </div>
           <div id="personCompanyList" class="person-company-list"></div>
         </div>
@@ -88,6 +88,10 @@
             <span class="legend-item"><span class="legend-dot company"></span>公司</span>
             <span class="legend-item"><span class="legend-dot person"></span>人員</span>
             <span class="legend-item"><span class="legend-dot address"></span>地址</span>
+            <span class="legend-item"><span class="legend-dot legal-entity"></span>法人</span>
+            <span class="legend-relation"><span class="legend-line confirmed"></span>已確認</span>
+            <span class="legend-relation"><span class="legend-line suspected"></span>疑似</span>
+            <span class="legend-note">同名群組僅代表姓名相符</span>
           </div>
           <div id="graphContainer2" class="graph-container" style="height:480px">
             <div class="graph-empty" id="graphEmpty2">
@@ -143,17 +147,98 @@
               <span class="legend-item"><span class="legend-dot company"></span>公司</span>
               <span class="legend-item"><span class="legend-dot person"></span>人員</span>
               <span class="legend-item"><span class="legend-dot address"></span>地址</span>
+              <span class="legend-item"><span class="legend-dot legal-entity"></span>法人</span>
+              <span class="legend-relation"><span class="legend-line confirmed"></span>已確認</span>
+              <span class="legend-relation"><span class="legend-line suspected"></span>疑似</span>
+              <span class="legend-note">同名人員不會自動視為同一人</span>
             </div>
             <div id="graphContainer" class="graph-container">
               <div class="graph-empty" id="graphEmpty">
                 <div class="graph-empty-icon">◎</div>
-                <p>查詢公司後自動建立關聯圖<br>點擊人員節點可展開關聯公司</p>
+                <p>查詢公司後自動建立關聯圖<br>代表人可查詢同名公司；其他角色依官方資料能力處理</p>
               </div>
               <canvas id="graphCanvas"></canvas>
             </div>
             <div class="graph-info" id="graphInfo"></div>
           </div>
         </div>
+
+        <!-- 第三階段：DD 工作台 -->
+        <section id="ddWorkbench" class="dd-workbench" style="display:none">
+          <div class="dd-toolbar">
+            <div>
+              <span class="panel-label">DD 初步評估工作台</span>
+              <p id="ddDataTimestamp" class="dd-data-time"></p>
+            </div>
+            <div class="dd-toolbar-actions">
+              <button id="ddRuleSettingsBtn" class="btn-ghost btn-sm">⚙ 風險規則</button>
+              <button id="ddExportReportBtn" class="btn-outline">↓ 匯出 DD 報告</button>
+            </div>
+          </div>
+
+          <div class="dd-summary-grid">
+            <article class="dd-card dd-risk-card">
+              <div class="dd-card-head">
+                <span class="sub-panel-label">初步風險評分</span>
+                <span id="ddRiskLevel" class="dd-risk-level risk-level-low">低風險</span>
+              </div>
+              <div class="dd-score-row">
+                <div class="dd-score"><strong id="ddRiskScore">0</strong><span>/100</span></div>
+                <div class="dd-risk-meter"><span id="ddRiskMeterFill"></span></div>
+              </div>
+              <p class="dd-score-note">分數用於初步篩選與排序，不代表法律、信用或投資結論。</p>
+              <ul id="ddRiskFindings" class="dd-risk-findings"></ul>
+            </article>
+
+            <article class="dd-card">
+              <div class="dd-card-head">
+                <span class="sub-panel-label">關聯可信度</span>
+              </div>
+              <div id="ddRelationSummary" class="dd-relation-summary"></div>
+              <div class="dd-relation-explain">
+                <p><span class="legend-line confirmed"></span><strong>已確認：</strong>官方公司資料直接揭露的角色、地址或分公司關係。</p>
+                <p><span class="legend-line suspected"></span><strong>疑似：</strong>僅因姓名相同等線索建立，仍需其他識別資料確認。</p>
+              </div>
+            </article>
+          </div>
+
+          <article class="dd-card">
+            <div class="dd-card-head">
+              <div>
+                <span class="sub-panel-label">資料來源覆蓋</span>
+                <p class="dd-card-desc">未串接的外部資料源可先以人工查核紀錄納入評估；後續可透過 DDCore provider 介面擴充。</p>
+              </div>
+              <button id="ddAddEvidenceBtn" class="btn-outline">＋ 新增查核紀錄</button>
+            </div>
+            <div id="ddProviderGrid" class="dd-provider-grid"></div>
+          </article>
+
+          <article class="dd-card">
+            <div class="dd-card-head">
+              <span class="sub-panel-label">外部查核事項</span>
+              <span id="ddEvidenceCount" class="record-count">0 筆</span>
+            </div>
+            <div class="dd-table-wrap">
+              <table class="data-table dd-evidence-table">
+                <thead><tr><th>類型</th><th>事項</th><th>狀態</th><th>嚴重度</th><th>事件日期</th><th>來源</th><th>操作</th></tr></thead>
+                <tbody id="ddEvidenceBody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <details class="dd-card dd-audit-card">
+            <summary>
+              <span class="sub-panel-label">查核軌跡</span>
+              <span class="record-count">保留於本機瀏覽器</span>
+            </summary>
+            <div class="dd-table-wrap">
+              <table class="data-table">
+                <thead><tr><th>時間</th><th>動作</th><th>說明</th></tr></thead>
+                <tbody id="ddAuditBody"></tbody>
+              </table>
+            </div>
+          </details>
+        </section>
       </section>
 
     </div><!-- /page-search -->
@@ -169,9 +254,9 @@
           <!-- 說明 -->
           <div class="batch-intro">
             <h2 class="batch-title">批次供應商比對</h2>
-            <p class="batch-desc">上傳含有統一編號、公司名稱或負責人姓名的 CSV 或 Excel 檔，系統會自動逐筆查詢並標註風險。</p>
+            <p class="batch-desc">上傳含有統一編號或公司名稱的 CSV／Excel 檔，系統會逐筆查詢；代表人、登記地址及國家欄位可用於交叉比對。</p>
             <div class="batch-format-hint">
-              <span class="hint-label">必要欄位名稱（完全相符）</span>
+              <span class="hint-label">至少需有統一編號或公司名稱</span>
               <span class="hint-chip">統一編號</span>
               <span class="hint-chip">公司名稱</span>
               <span class="hint-chip">登記地址</span>
@@ -179,7 +264,7 @@
               <span class="hint-chip">國家（TW=台灣）</span>
             </div>
             <p style="font-size:12px;color:var(--text-3);font-family:var(--font-mono);margin-top:8px">
-              ⚠ 欄位名稱需完全相符。國家欄填 TW 的才會查詢，其他國家自動略過。統一編號若遺失前導零會自動補回。
+              支援常用欄位別名，例如「統編、公司統編、廠商名稱、負責人、地址、國別」。國家未填時預設為台灣；非台灣資料會自動略過。
             </p>
             <a href="#" id="downloadTemplate" class="btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px">
               ↓ 下載範本 CSV
@@ -239,6 +324,7 @@
                     <th>統一編號</th>
                     <th>狀態</th>
                     <th>負責人</th>
+                    <th>初步風險</th>
                     <th>風險標註</th>
                     <th>資料來源</th>
                   </tr>
@@ -268,6 +354,65 @@
       </section>
     </div><!-- /page-batch -->
 
+    <!-- 新增外部查核紀錄 -->
+    <div id="ddEvidenceModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="ddEvidenceModalTitle">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div><span class="panel-label" id="ddEvidenceModalTitle">新增外部查核紀錄</span><p>請保留可回溯的來源與判斷狀態。</p></div>
+          <button type="button" class="modal-close" data-close-modal="ddEvidenceModal" aria-label="關閉">×</button>
+        </div>
+        <form id="ddEvidenceForm" class="modal-form">
+          <div class="form-grid">
+            <label>查核類型<select id="ddEvidenceType" required>
+              <option value="litigation">訴訟／裁判書</option>
+              <option value="procurement">政府採購停權／拒絕往來</option>
+              <option value="sanctions">制裁／觀察名單</option>
+              <option value="negativeNews">重大負面新聞</option>
+              <option value="regulatory">主管機關裁罰</option>
+              <option value="credit">信用／財務異常</option>
+              <option value="other">其他查核事項</option>
+            </select></label>
+            <label>確認狀態<select id="ddEvidenceStatus" required>
+              <option value="confirmed">已確認</option>
+              <option value="unverified" selected>待確認</option>
+              <option value="cleared">已排除／已釐清</option>
+            </select></label>
+            <label>嚴重度<select id="ddEvidenceSeverity" required>
+              <option value="low">低</option><option value="medium" selected>中</option><option value="high">高</option><option value="critical">重大</option>
+            </select></label>
+            <label>事件日期<input type="date" id="ddEvidenceDate"></label>
+          </div>
+          <label>查核事項<input type="text" id="ddEvidenceTitle" maxlength="160" required placeholder="例如：涉及○○年度訴訟案件"></label>
+          <label>來源網址<input type="url" id="ddEvidenceUrl" maxlength="600" placeholder="https://..."></label>
+          <label>查核備註<textarea id="ddEvidenceNote" rows="4" maxlength="1200" placeholder="記錄案號、查核範圍、判斷依據或待追蹤事項"></textarea></label>
+          <div class="modal-actions"><button type="button" class="btn-ghost" data-close-modal="ddEvidenceModal">取消</button><button type="submit" class="search-btn">儲存紀錄</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 風險規則設定 -->
+    <div id="ddRulesModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="ddRulesModalTitle">
+      <div class="modal-card modal-card-wide">
+        <div class="modal-header">
+          <div><span class="panel-label" id="ddRulesModalTitle">風險規則設定</span><p>設定儲存在目前瀏覽器；分數僅供初步篩選。</p></div>
+          <button type="button" class="modal-close" data-close-modal="ddRulesModal" aria-label="關閉">×</button>
+        </div>
+        <form id="ddRulesForm" class="modal-form">
+          <div class="rule-table">
+            <div class="rule-row rule-head"><span>啟用</span><span>規則</span><span>分數／參數</span></div>
+            <div class="rule-row"><input type="checkbox" id="ruleInactiveEnabled"><span>公司非核准設立</span><label>加分 <input type="number" id="ruleInactiveWeight" min="0" max="100"></label></div>
+            <div class="rule-row"><input type="checkbox" id="ruleMissingResponsibleEnabled"><span>未提供代表人</span><label>加分 <input type="number" id="ruleMissingResponsibleWeight" min="0" max="100"></label></div>
+            <div class="rule-row"><input type="checkbox" id="ruleLowCapitalEnabled"><span>資本額低於門檻</span><label>加分 <input type="number" id="ruleLowCapitalWeight" min="0" max="100">　門檻 <input type="number" id="ruleLowCapitalThreshold" min="0" step="10000"></label></div>
+            <div class="rule-row"><input type="checkbox" id="ruleRecentChangeEnabled"><span>近期有核准變更</span><label>加分 <input type="number" id="ruleRecentChangeWeight" min="0" max="100">　天數 <input type="number" id="ruleRecentChangeDays" min="1" max="3650"></label></div>
+            <div class="rule-row"><input type="checkbox" id="ruleApiWarningsEnabled"><span>官方資料取得不完整</span><label>加分 <input type="number" id="ruleApiWarningsWeight" min="0" max="100"></label></div>
+            <div class="rule-row rule-manual"><input type="checkbox" id="ruleManualEnabled"><span>人工查核證據</span><label>低 <input type="number" id="ruleManualLow" min="0" max="100"> 中 <input type="number" id="ruleManualMedium" min="0" max="100"> 高 <input type="number" id="ruleManualHigh" min="0" max="100"> 重大 <input type="number" id="ruleManualCritical" min="0" max="100"><br>待確認倍率 <input type="number" id="ruleManualUnverified" min="0" max="1" step="0.1"> 上限 <input type="number" id="ruleManualCap" min="0" max="100"></label></div>
+          </div>
+          <fieldset class="rule-levels"><legend>風險等級門檻</legend><label>中風險 <input type="number" id="ruleLevelModerate" min="0" max="100"></label><label>高風險 <input type="number" id="ruleLevelHigh" min="0" max="100"></label><label>重大風險 <input type="number" id="ruleLevelCritical" min="0" max="100"></label></fieldset>
+          <div class="modal-actions"><button type="button" id="ddRulesResetBtn" class="btn-ghost">恢復預設</button><span class="modal-spacer"></span><button type="button" class="btn-ghost" data-close-modal="ddRulesModal">取消</button><button type="submit" class="search-btn">儲存規則</button></div>
+        </form>
+      </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay hidden">
       <div class="loading-spinner"></div>
@@ -281,12 +426,13 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <p>資料來源：<a href="https://data.gcis.nat.gov.tw" target="_blank" rel="noopener">經濟部商工行政資料開放平臺</a>　｜　使用前請詳閱平臺<a href="https://data.gcis.nat.gov.tw/main/terms" target="_blank" rel="noopener">使用規範</a></p>
-      <p class="footer-note">⚠ 本工具僅供參考，實際商業決策請以官方資料為準。</p>
+      <p class="footer-note">⚠ 本工具僅供初步篩選；未串接或未登錄不代表查無風險。人工紀錄與規則儲存於目前瀏覽器，清除網站資料後將無法復原。</p>
     </div>
   </footer>
 
   <script src="api.js"></script>
   <script src="graph.js"></script>
+  <script src="dd.js"></script>
   <script src="app.js"></script>
   <script src="batch.js"></script>
   <script>
@@ -304,7 +450,7 @@
     // ── 下載範本 CSV ──
     document.getElementById('downloadTemplate').addEventListener('click', e => {
       e.preventDefault();
-      const csv = '\uFEFF統一編號,公司名稱,負責人,地址\n03522600,遠東新世紀股份有限公司,徐旭東,\n04541302,台灣積體電路製造股份有限公司,,\n';
+      const csv = '\uFEFF統一編號,公司名稱,登記地址,代表人,國家\n03522600,遠東新世紀股份有限公司,,徐旭東,TW\n,範例供應商股份有限公司,台北市範例路1號,王小明,TW\n';
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);

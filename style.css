@@ -2,23 +2,27 @@
    CSS Variables & Reset
    =========================== */
 :root {
-  --bg: #0d0f14;
-  --bg-2: #141720;
-  --bg-3: #1c2030;
-  --bg-4: #242840;
-  --accent: #e8c84a;
-  --accent-dim: #b89c32;
-  --accent-glow: rgba(232, 200, 74, 0.15);
-  --red: #e05555;
-  --green: #4ecb7a;
-  --blue: #5b9cf6;
-  --purple: #a07cf5;
-  --text: #e8eaf0;
-  --text-2: #9ba3b8;
-  --text-3: #5a6380;
-  --border: rgba(255,255,255,0.07);
-  --border-accent: rgba(232,200,74,0.3);
-  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --bg: #ffffff;
+  --bg-2: #ffffff;
+  --bg-3: #f5f7fb;
+  --bg-4: #edf1f7;
+  --accent: #c79b00;
+  --accent-dim: #a97f00;
+  --accent-glow: rgba(199, 155, 0, 0.12);
+  --red: #c64242;
+  --green: #218653;
+  --blue: #3478c9;
+  --purple: #7654c7;
+  --text: #182033;
+  --text-2: #4f5b70;
+  --text-3: #778398;
+  --border: rgba(24, 32, 51, 0.12);
+  --border-accent: rgba(199, 155, 0, 0.38);
+  --shadow: 0 8px 28px rgba(35, 48, 77, 0.12);
+  --on-accent: #171717;
+  --overlay: rgba(34, 42, 58, 0.28);
+  --graph-dot: rgba(24, 32, 51, 0.08);
+  --edge-label-bg: rgba(255, 255, 255, 0.92);
   --radius: 6px;
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'Noto Serif TC', serif;
@@ -56,7 +60,8 @@ a:hover { text-decoration: underline; }
    =========================== */
 .site-header {
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(20,23,32,0.98) 0%, rgba(13,15,20,0.95) 100%);
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 1px 0 rgba(24,32,51,0.04);
   backdrop-filter: blur(12px);
   position: sticky; top: 0; z-index: 100;
 }
@@ -70,7 +75,7 @@ a:hover { text-decoration: underline; }
 
 .logo-badge {
   display: flex; align-items: center; justify-content: center;
-  width: 42px; height: 42px; background: var(--accent); color: var(--bg);
+  width: 42px; height: 42px; background: var(--accent); color: var(--on-accent);
   font-family: var(--font-display); font-size: 22px; letter-spacing: 1px;
   border-radius: 4px; flex-shrink: 0;
 }
@@ -96,7 +101,7 @@ a:hover { text-decoration: underline; }
   font-size: 13px; padding: 6px 16px; border-radius: 4px; cursor: pointer; transition: all 0.2s;
 }
 .nav-btn:hover { color: var(--text); }
-.nav-btn.active { background: var(--accent); color: var(--bg); font-weight: 600; }
+.nav-btn.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
 /* ===========================
    Search Section
@@ -134,7 +139,7 @@ a:hover { text-decoration: underline; }
 
 .search-btn {
   display: flex; align-items: center; gap: 8px; background: var(--accent);
-  color: var(--bg); border: none; font-family: var(--font-body); font-weight: 600;
+  color: var(--on-accent); border: none; font-family: var(--font-body); font-weight: 600;
   font-size: 15px; padding: 12px 24px; border-radius: var(--radius);
   cursor: pointer; transition: all 0.2s; white-space: nowrap;
 }
@@ -255,7 +260,7 @@ a:hover { text-decoration: underline; }
 }
 .data-table td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
 .data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td { background: rgba(255,255,255,0.02); }
+.data-table tr:hover td { background: rgba(52,120,201,0.045); }
 
 .clickable-name { color: var(--accent); cursor: pointer; transition: opacity 0.15s; }
 .clickable-name:hover { opacity: 0.8; text-decoration: underline; }
@@ -310,7 +315,7 @@ a:hover { text-decoration: underline; }
   background: none; border: 1px solid var(--border); color: var(--text-3);
   font-family: var(--font-mono); cursor: pointer; transition: all 0.2s; border-radius: var(--radius);
 }
-.btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+.btn-ghost:hover { color: var(--text); border-color: rgba(24,32,51,0.25); background: var(--bg-3); }
 .btn-sm { font-size: 11px; padding: 5px 12px; }
 
 .graph-controls { display: flex; gap: 8px; }
@@ -319,7 +324,7 @@ a:hover { text-decoration: underline; }
    Loading & Toast
    =========================== */
 .loading-overlay {
-  position: fixed; inset: 0; background: rgba(13,15,20,0.7);
+  position: fixed; inset: 0; background: var(--overlay);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 16px; z-index: 200; backdrop-filter: blur(4px);
 }
@@ -401,7 +406,7 @@ a:hover { text-decoration: underline; }
 .drop-icon { font-size: 36px; margin-bottom: 12px; }
 .drop-text { font-size: 15px; color: var(--text-2); margin-bottom: 12px; }
 .drop-btn {
-  display: inline-block; background: var(--accent); color: var(--bg);
+  display: inline-block; background: var(--accent); color: var(--on-accent);
   font-family: var(--font-body); font-weight: 600; font-size: 14px;
   padding: 8px 20px; border-radius: var(--radius); cursor: pointer; transition: background 0.2s;
 }
@@ -711,7 +716,7 @@ body.modal-open { overflow: hidden; }
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(5,7,10,.82);
+  background: rgba(34,42,58,.34);
   backdrop-filter: blur(5px);
 }
 .modal-backdrop.hidden { display: none; }
@@ -874,4 +879,36 @@ body.modal-open { overflow: hidden; }
     display: block;
     margin: 4px 0 0;
   }
+}
+
+
+/* ===========================
+   Light theme refinements
+   =========================== */
+html { color-scheme: light; }
+.grain-overlay { opacity: 0.012; mix-blend-mode: multiply; }
+.site-header { box-shadow: 0 1px 10px rgba(35,48,77,.06); }
+.logo-badge, .nav-btn.active, .search-btn, .drop-btn { box-shadow: 0 3px 10px rgba(199,155,0,.18); }
+.search-box, .info-panel, .graph-panel, .batch-preview-bar, .batch-drop-zone, .dd-card, .modal-card, .person-result-wrap {
+  box-shadow: 0 4px 16px rgba(35,48,77,.055);
+}
+.search-input, .modal-form input, .modal-form select, .modal-form textarea {
+  box-shadow: inset 0 1px 2px rgba(35,48,77,.035);
+}
+.graph-container { background: #fbfcfe; }
+.graph-legend, .graph-info { background: #ffffff; }
+.tooltip { background: rgba(255,255,255,.98); }
+.error-toast { background: #fff8f8; }
+.loading-overlay { color: var(--text); }
+::-webkit-scrollbar-track { background: #f2f4f8; }
+::-webkit-scrollbar-thumb { background: #c8cfda; }
+::-webkit-scrollbar-thumb:hover { background: #9ca8ba; }
+.risk-flag { color: #b53636; }
+.risk-info { color: #2f69b2; }
+.risk-err { color: #b53636; }
+.modal-card { background: #fff; }
+.modal-header { background: #f7f8fb; }
+input, select, textarea { accent-color: var(--accent); }
+@media print {
+  body { background: #fff !important; color: #111 !important; }
 }

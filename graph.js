@@ -509,9 +509,18 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
     nodeMap.forEach(drawNode);
   }
 
+  function themeColor(variableName, fallback) {
+    try {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+      return value || fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   function drawDots() {
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    ctx.fillStyle = themeColor('--graph-dot', 'rgba(24,32,51,0.08)');
     const spacing = Math.max(8, 40 * scale);
     const offsetX = panX % spacing;
     const offsetY = panY % spacing;
@@ -553,7 +562,7 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
       ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
       const textWidth = ctx.measureText(edge.label).width + 8;
       ctx.globalAlpha = 0.55;
-      ctx.fillStyle = '#0d0f14';
+      ctx.fillStyle = themeColor('--edge-label-bg', 'rgba(255,255,255,0.92)');
       ctx.fillRect(middleX - textWidth / 2, middleY - fontSize * 0.7, textWidth, fontSize * 1.4);
       ctx.globalAlpha = 0.9;
       ctx.fillStyle = color;
@@ -740,9 +749,19 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
 
   function exportPNG() {
     if (!canvas) return;
+
+    // CSS 背景不會自動寫進 Canvas；匯出時先補上目前主題底色。
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const exportCtx = exportCanvas.getContext('2d');
+    exportCtx.fillStyle = themeColor('--bg', '#ffffff');
+    exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    exportCtx.drawImage(canvas, 0, 0);
+
     const link = document.createElement('a');
     link.download = exportFileName;
-    link.href = canvas.toDataURL('image/png');
+    link.href = exportCanvas.toDataURL('image/png');
     link.click();
   }
 

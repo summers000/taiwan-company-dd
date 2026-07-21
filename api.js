@@ -184,6 +184,138 @@ function dedupeCompanies(records) {
   return [...map.values()];
 }
 
+function uniqueStrings(values = []) {
+  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))];
+}
+
+/**
+ * 合併不同官方查詢路徑的公司結果，同時保留命中角色、來源與地址。
+ */
+function mergeSearchCompanies(records = []) {
+  const map = new Map();
+
+  records.forEach(raw => {
+    const record = normalizeCompanyRecord(raw || {});
+    const key = record.Business_Accounting_NO || `${normalizeCompanyName(record.Company_Name)}:${normalizeAddress(record.Company_Location)}`;
+    if (!key) return;
+
+    const previous = map.get(key) || {};
+    const roles = uniqueStrings([
+      ...(previous._matchRoles || []),
+      ...(raw?._matchRoles || []),
+      raw?._matchRole,
+    ]);
+    const sources = uniqueStrings([
+      ...(previous._matchSources || []),
+      ...(raw?._matchSources || []),
+      raw?._searchSource,
+    ]);
+
+    map.set(key, {
+      ...previous,
+      ...record,
+      _matchRoles: roles,
+      _matchSources: sources,
+      _matchedPerson: raw?._matchedPerson || previous._matchedPerson || '',
+      _matchedAddress: raw?._matchedAddress || previous._matchedAddress || record.Company_Location || '',
+    });
+  });
+
+  return [...map.values()];
+}
+
+function attachPartialErrors(results, errors = []) {
+  const messages = uniqueStrings(errors.map(error => error?.message || error));
+  if (messages.length > 0) {
+    Object.defineProperty(results, 'partialErrors', {
+      value: messages,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return results;
+}
+
+async function mapWithConcurrency(items, concurrency, worker) {
+  const source = [...items];
+  const output = new Array(source.length);
+  let nextIndex = 0;
+
+  async function run() {
+    while (nextIndex < source.length) {
+      const index = nextIndex++;
+      output[index] = await worker(source[index], index);
+    }
+  }
+
+  const count = Math.max(1, Math.min(Number(concurrency) || 1, source.length || 1));
+  await Promise.all(Array.from({ length: count }, run));
+  return output;
+}
+
+async function workerJson(path, params = {}, options = {}) {
+  const workerUrl = new URL(path, CF_WORKER.endsWith('/') ? CF_WORKER : `${CF_WORKER}/`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') workerUrl.searchParams.set(key, String(value));
+  });
+
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 25000;
+  let timedOut = false;
+
+  if (externalSignal?.aborted) throw new GCISError('ABORTED', '查詢已取消。');
+  const abortFromExternal = () => controller.abort();
+  externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetch(workerUrl.toString(), {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let payload = null;
+    try { payload = text ? JSON.parse(text) : null; } catch (_) {}
+
+    if (!response.ok || !payload?.ok) {
+      const message = payload?.message || `進階官方查詢服務無法使用（HTTP ${response.status}）。`;
+      throw new GCISError(
+        response.status === 404 ? 'BRIDGE_NOT_DEPLOYED' : 'BRIDGE_FAILED',
+        message,
+        { status: response.status, responsePreview: text.slice(0, 200) }
+      );
+    }
+    return payload;
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      if (externalSignal?.aborted && !timedOut) throw new GCISError('ABORTED', '查詢已取消。');
+      throw new GCISError('TIMEOUT', '進階官方查詢逾時，請稍後再試。');
+    }
+    throw toGCISException(err, 'BRIDGE_FAILED');
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', abortFromExternal);
+  }
+}
+
+function normalizeFindbizRecord(record = {}, extra = {}) {
+  return normalizeCompanyRecord({
+    Business_Accounting_NO: record.Business_Accounting_NO || record.taxNo || record.banNo || '',
+    Company_Name: record.Company_Name || record.companyName || record.name || '',
+    Company_Status: record.Company_Status || record.statusCode || '',
+    Company_Status_Desc: record.Company_Status_Desc || record.status || '',
+    Responsible_Name: record.Responsible_Name || record.responsibleName || '',
+    Company_Location: record.Company_Location || record.address || '',
+    ...extra,
+    _matchRoles: uniqueStrings(record._matchRoles || record.roles || []),
+    _searchSource: '經濟部商工登記公示查詢',
+  });
+}
+
 function bigramSimilarity(a, b) {
   if (a === b) return 1;
   if (!a || !b) return 0;
@@ -386,12 +518,220 @@ async function searchCompanyAll(keyword, top = 20, options = {}) {
   return output;
 }
 
+async function fetchCompanyNameByTaxNo(taxNo, options = {}) {
+  const cleanTaxNo = String(taxNo || '').replace(/\D/g, '');
+  if (cleanTaxNo.length !== 8) return null;
+  const records = await gcisGet(
+    API.COMPANY_NAME_BY_TAX,
+    `Business_Accounting_NO eq ${cleanTaxNo}`,
+    0,
+    5,
+    options
+  );
+  return records?.[0] ? normalizeCompanyRecord(records[0]) : null;
+}
+
+async function searchDirectorsByNameBestEffort(name, top = 50, options = {}) {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return [];
+
+  // 不同版本的開放資料欄位名稱可能不同，逐一嘗試並合併可用結果。
+  const filters = [
+    `Person_Name eq ${cleanName}`,
+    `Name eq ${cleanName}`,
+    `Director_Name eq ${cleanName}`,
+  ];
+  const settled = await Promise.allSettled(
+    filters.map(filter => gcisGet(API.COMPANY_DIRECTORS, filter, 0, top, options))
+  );
+  if (options.signal?.aborted) throw new GCISError('ABORTED', '查詢已取消。');
+
+  const fulfilled = settled.filter(item => item.status === 'fulfilled');
+  const rejected = settled.filter(item => item.status === 'rejected');
+  if (fulfilled.length === 0) {
+    throw new GCISError('DIRECTOR_REVERSE_UNSUPPORTED', '董監事開放資料目前未接受姓名反查條件。', {
+      errors: rejected.map(item => item.reason?.message || '未知錯誤'),
+    });
+  }
+
+  const raw = fulfilled.flatMap(item => item.value || []);
+  const byTax = new Map();
+  raw.forEach(item => {
+    const taxNo = String(item.Business_Accounting_NO || item.Ban_No || '').replace(/\D/g, '');
+    if (taxNo.length !== 8) return;
+    const role = item.Person_Position_Name || item.Title || item.Director_Title || '董事／監察人／經理人';
+    const previous = byTax.get(taxNo) || { taxNo, raw: item, roles: [] };
+    previous.roles = uniqueStrings([...previous.roles, role]);
+    previous.raw = { ...previous.raw, ...item };
+    byTax.set(taxNo, previous);
+  });
+
+  const candidates = [...byTax.values()].slice(0, top);
+  const hydrated = await mapWithConcurrency(candidates, 4, async candidate => {
+    let company = normalizeCompanyRecord(candidate.raw);
+    if (!company.Company_Name) {
+      try {
+        company = (await fetchCompanyNameByTaxNo(candidate.taxNo, options)) || company;
+      } catch (_) {}
+    }
+    return {
+      ...company,
+      Business_Accounting_NO: candidate.taxNo,
+      _matchRoles: candidate.roles,
+      _matchedPerson: cleanName,
+      _searchSource: '經濟部董監事開放資料',
+    };
+  });
+
+  return attachPartialErrors(mergeSearchCompanies(hydrated), rejected.map(item => item.reason));
+}
+
+async function searchFindbiz(type, query, top = 50, options = {}) {
+  const payload = await workerJson('findbiz-search', { type, q: query, top }, options);
+  const records = (payload.results || []).map(record => normalizeFindbizRecord(record, {
+    _matchedPerson: type === 'person' ? query : '',
+    _matchedAddress: type === 'address' ? (record.address || query) : '',
+  }));
+  const results = mergeSearchCompanies(records);
+  return attachPartialErrors(results, payload.warnings || []);
+}
+
 /**
- * 目前官方資料集僅支援依「負責人姓名」反查公司，不等同董監事反查。
+ * 依任何公司登記人員姓名查詢：代表人、董事、監察人、經理人與法人代表。
+ * 查詢結果只證明「姓名與登記角色相符」，不代表跨公司必為同一自然人。
  */
+async function searchCompaniesByAnyPerson(name, top = 50, options = {}) {
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return [];
+
+  // 代表人開放資料與公示查詢並行；只有公示查詢失敗時，才額外嘗試董監事資料集的姓名條件。
+  const [responsibleResult, findbizResult] = await Promise.allSettled([
+    gcisGet(API.COMPANY_BY_PERSON, `Responsible_Name eq ${cleanName}`, 0, top, options),
+    searchFindbiz('person', cleanName, top, options),
+  ]);
+  if (options.signal?.aborted) throw new GCISError('ABORTED', '查詢已取消。');
+
+  const records = [];
+  const errors = [];
+  let anyPathSucceeded = false;
+
+  if (responsibleResult.status === 'fulfilled') {
+    anyPathSucceeded = true;
+    records.push(...(responsibleResult.value || []).map(record => ({
+      ...record,
+      _matchRoles: ['代表人'],
+      _matchedPerson: cleanName,
+      _searchSource: '經濟部負責人開放資料',
+    })));
+  } else if (!isAbortLike(responsibleResult.reason)) {
+    errors.push(responsibleResult.reason);
+  }
+
+  if (findbizResult.status === 'fulfilled') {
+    anyPathSucceeded = true;
+    records.push(...findbizResult.value);
+    errors.push(...(findbizResult.value.partialErrors || []));
+  } else if (!isAbortLike(findbizResult.reason)) {
+    errors.push(findbizResult.reason);
+
+    // Worker 尚未更新或公示查詢暫時異常時，嘗試開放資料的董監事欄位作為備援。
+    try {
+      const directorRecords = await searchDirectorsByNameBestEffort(cleanName, top, options);
+      anyPathSucceeded = true;
+      records.push(...directorRecords);
+      errors.push(...(directorRecords.partialErrors || []));
+    } catch (directorError) {
+      if (!isAbortLike(directorError)) errors.push(directorError);
+    }
+  }
+
+  const results = mergeSearchCompanies(records).slice(0, top);
+  if (!anyPathSucceeded) {
+    throw new GCISError(
+      'ADVANCED_PERSON_SEARCH_UNAVAILABLE',
+      '人員姓名查詢服務目前無法使用。請部署本版本附帶的 Cloudflare Worker，再重新查詢。',
+      { errors: errors.map(error => error?.message || error) }
+    );
+  }
+  return attachPartialErrors(results, errors);
+}
+
+function isAbortLike(error) {
+  return error?.code === 'ABORTED' || error?.name === 'AbortError';
+}
+
+// 保留舊函式名稱，避免其他模組尚未更新時中斷。
 async function searchCompaniesByPerson(name, top = 50, options = {}) {
-  const records = await gcisGet(API.COMPANY_BY_PERSON, `Responsible_Name eq ${String(name || '').trim()}`, 0, top, options);
-  return dedupeCompanies(records);
+  return searchCompaniesByAnyPerson(name, top, options);
+}
+
+/**
+ * 依公司登記地址直接查詢。先嘗試官方開放資料欄位，再由公示查詢 bridge 補齊。
+ */
+async function searchCompaniesByAddress(address, top = 50, options = {}) {
+  const cleanAddress = String(address || '').trim();
+  if (!cleanAddress) return [];
+
+  const records = [];
+  const errors = [];
+  let anyPathSucceeded = false;
+
+  // 公示查詢本身即提供地址類型，優先使用，避免為每個公司狀態發送大量請求。
+  try {
+    const findbizResults = await searchFindbiz('address', cleanAddress, top, options);
+    anyPathSucceeded = true;
+    records.push(...findbizResults);
+    errors.push(...(findbizResults.partialErrors || []));
+  } catch (findbizError) {
+    if (isAbortLike(findbizError)) throw findbizError;
+    errors.push(findbizError);
+
+    // Worker 尚未更新時，最後再嘗試開放資料的 Company_Location 欄位。
+    const statusCodes = Object.keys(COMPANY_STATUS);
+    const settled = await Promise.allSettled(statusCodes.map(code => gcisGet(
+      API.COMPANY_SEARCH,
+      `Company_Location like ${cleanAddress} and Company_Status eq ${code}`,
+      0,
+      top,
+      options
+    )));
+    if (options.signal?.aborted) throw new GCISError('ABORTED', '查詢已取消。');
+
+    const fulfilled = settled.filter(item => item.status === 'fulfilled');
+    const rejected = settled.filter(item => item.status === 'rejected');
+    if (fulfilled.length > 0) {
+      anyPathSucceeded = true;
+      records.push(...fulfilled.flatMap(item => item.value || []).map(record => ({
+        ...record,
+        _matchedAddress: record.Company_Location || record.Company_Address || cleanAddress,
+        _searchSource: '經濟部公司開放資料',
+      })));
+    }
+    errors.push(...rejected.map(item => item.reason));
+  }
+
+  const normalizedQuery = normalizeAddress(cleanAddress);
+  const results = mergeSearchCompanies(records)
+    .map(record => {
+      const recordAddress = record.Company_Location || record.Company_Address || record._matchedAddress || '';
+      const normalizedRecord = normalizeAddress(recordAddress);
+      let _addressMatchType = '關鍵字相符';
+      if (normalizedRecord && normalizedRecord === normalizedQuery) _addressMatchType = '完整地址相同';
+      else if (normalizedRecord && normalizedQuery && (normalizedRecord.includes(normalizedQuery) || normalizedQuery.includes(normalizedRecord))) {
+        _addressMatchType = '地址部分相符';
+      }
+      return { ...record, _matchedAddress: recordAddress, _addressMatchType };
+    })
+    .slice(0, top);
+
+  if (!anyPathSucceeded) {
+    throw new GCISError(
+      'ADVANCED_ADDRESS_SEARCH_UNAVAILABLE',
+      '地址查詢服務目前無法使用。請部署本版本附帶的 Cloudflare Worker，再重新查詢。',
+      { errors: errors.map(error => error?.message || error) }
+    );
+  }
+  return attachPartialErrors(results, errors);
 }
 
 async function fetchDirectors(taxNo, options = {}) {
@@ -452,6 +792,8 @@ window.GCISApi = {
   searchCompanyByName,
   searchCompanyAll,
   searchCompaniesByPerson,
+  searchCompaniesByAnyPerson,
+  searchCompaniesByAddress,
   fetchDirectors,
   fetchBranches,
   getStatusLabel,
@@ -462,5 +804,6 @@ window.GCISApi = {
   normalizePersonName,
   normalizeAddress,
   normalizeCompanyRecord,
+  mergeSearchCompanies,
   matchCompanyName,
 };

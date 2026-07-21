@@ -47,7 +47,7 @@
           <div class="search-tabs">
             <button class="tab-btn active" data-tab="company">公司名稱</button>
             <button class="tab-btn" data-tab="tax">統一編號</button>
-            <button class="tab-btn" data-tab="person">負責人姓名</button>
+            <button class="tab-btn" data-tab="person">人員姓名</button>
             <button class="tab-btn" data-tab="address">公司地址</button>
           </div>
           <div class="search-box">
@@ -64,12 +64,12 @@
         </div>
       </section>
 
-      <!-- 負責人查詢結果區塊 -->
+      <!-- 人員姓名／地址查詢共用結果區塊 -->
       <section class="content-section" id="personSection" style="display:none">
         <div class="person-result-wrap">
           <div class="panel-header" style="border-radius:6px 6px 0 0">
             <div>
-              <span class="panel-label" id="personResultTitle">負責人查詢結果</span>
+              <span class="panel-label" id="personResultTitle">進階查詢結果</span>
               <span class="record-count" id="personResultCount" style="margin-left:12px"></span>
             </div>
             <button id="personAddAllBtn" class="btn-outline">↻ 重建關聯圖</button>
@@ -91,7 +91,7 @@
             <span class="legend-item"><span class="legend-dot legal-entity"></span>法人</span>
             <span class="legend-relation"><span class="legend-line confirmed"></span>已確認</span>
             <span class="legend-relation"><span class="legend-line suspected"></span>疑似</span>
-            <span class="legend-note">同名群組僅代表姓名相符</span>
+            <span class="legend-note">姓名同名與部分地址相符以疑似關聯呈現</span>
           </div>
           <div id="graphContainer2" class="graph-container" style="height:480px">
             <div class="graph-empty" id="graphEmpty2">
@@ -425,7 +425,7 @@
 
   <footer class="site-footer">
     <div class="footer-inner">
-      <p>資料來源：<a href="https://data.gcis.nat.gov.tw" target="_blank" rel="noopener">經濟部商工行政資料開放平臺</a>　｜　使用前請詳閱平臺<a href="https://data.gcis.nat.gov.tw/main/terms" target="_blank" rel="noopener">使用規範</a></p>
+      <p>資料來源：<a href="https://data.gcis.nat.gov.tw" target="_blank" rel="noopener">經濟部商工行政資料開放平臺</a>、<a href="https://findbiz.nat.gov.tw" target="_blank" rel="noopener">商工登記公示資料查詢</a>　｜　使用前請詳閱平臺<a href="https://data.gcis.nat.gov.tw/main/terms" target="_blank" rel="noopener">使用規範</a></p>
       <p class="footer-note">⚠ 本工具僅供初步篩選；未串接或未登錄不代表查無風險。人工紀錄與規則儲存於目前瀏覽器，清除網站資料後將無法復原。</p>
     </div>
   </footer>

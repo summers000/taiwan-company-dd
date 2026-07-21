@@ -818,3 +818,60 @@ body.modal-open { overflow: hidden; }
   .rule-row.rule-head { display: none; }
   .modal-backdrop { padding: 10px; }
 }
+
+/* ===========================
+   Advanced person / address search
+   =========================== */
+.match-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 5px 0 6px;
+}
+
+.match-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+}
+
+.match-chip--person {
+  color: var(--accent);
+  background: var(--accent-glow);
+  border-color: var(--border-accent);
+}
+
+.match-chip--exact {
+  color: var(--green);
+  background: rgba(78, 203, 122, 0.12);
+  border-color: rgba(78, 203, 122, 0.3);
+}
+
+.match-chip--possible {
+  color: var(--text-2);
+  background: rgba(155, 163, 184, 0.08);
+}
+
+.search-result-address {
+  color: var(--text-3);
+  margin-left: 12px;
+  font-family: var(--font-body);
+}
+
+.person-company-item.is-disabled {
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+@media (max-width: 640px) {
+  .search-result-address {
+    display: block;
+    margin: 4px 0 0;
+  }
+}

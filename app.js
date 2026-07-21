@@ -91,14 +91,14 @@ function setupSearchTabs() {
       const hints = {
         company: '支援關鍵字模糊搜尋，例如：台積電、遠東新世紀',
         tax:     '輸入 8 碼統一編號，例如：03522600',
-        person:  '輸入負責人完整姓名，例如：徐旭東',
-        address: '請先查到公司，再透過關聯圖查看同地址公司',
+        person:  '輸入公司登記人員姓名，可查代表人、董事、監察人、經理人及法人代表',
+        address: '輸入完整地址或地址關鍵字，可直接查詢相同或相近登記地址的公司',
       };
       $('searchHint').textContent = hints[currentSearchMode] || '';
       const placeholders = {
         company: '輸入公司名稱關鍵字...',
         tax:     '輸入統一編號（8碼）...',
-        person:  '輸入負責人姓名...',
+        person:  '輸入人員姓名...',
         address: '輸入地址關鍵字...',
       };
       searchInput.placeholder = placeholders[currentSearchMode] || '搜尋...';
@@ -140,7 +140,7 @@ function setupEventListeners() {
   if (clearGraphBtn2)  clearGraphBtn2.addEventListener('click',  () => personGraph.clear());
   if (exportGraphBtn2) exportGraphBtn2.addEventListener('click', () => personGraph.exportPNG());
 
-  // 點擊關聯圖節點：依節點的真實角色分流，避免把董事、經理人或法人誤當成負責人反查。
+  // 點擊關聯圖節點：公司、人員、法人與地址都可進一步查詢。
   document.getElementById('graphCanvas').addEventListener('nodeClick', e => handleGraphNodeClick(e.detail, companyGraph));
 
   const graphCanvas2 = document.getElementById('graphCanvas2');
@@ -156,7 +156,8 @@ async function doSearch() {
   const loadingMessages = {
     company: '搜尋公司中...',
     tax: '查詢公司基本資料...',
-    person: `查詢 ${query} 的相關公司...`,
+    person: `查詢 ${query} 的公司登記角色...`,
+    address: `查詢地址「${query}」...`,
   };
   const context = beginRequest(loadingMessages[currentSearchMode] || '查詢中...');
 
@@ -164,10 +165,7 @@ async function doSearch() {
     case 'company': await searchByCompanyName(query, context); break;
     case 'tax': await loadCompanyByTax(query, context); break;
     case 'person': await loadCompaniesByPerson(query, true, context); break;
-    case 'address':
-      finishRequest(context);
-      showError('地址搜尋請先查到公司，再透過關聯圖查看同地址公司。');
-      break;
+    case 'address': await loadCompaniesByAddress(query, true, context); break;
   }
 }
 
@@ -186,16 +184,19 @@ async function searchByCompanyName(keyword, context = beginRequest('搜尋公司
   }
 }
 
-async function loadCompaniesByPerson(name, showFullResult = false, context = beginRequest(`查詢 ${name} 的相關公司...`)) {
+async function loadCompaniesByPerson(name, showFullResult = false, context = beginRequest(`查詢 ${name} 的公司登記角色...`)) {
   try {
-    const results = await GCISApi.searchCompaniesByPerson(name, 50, { signal: context.signal });
+    const results = await GCISApi.searchCompaniesByAnyPerson(name, 80, { signal: context.signal });
     if (!isCurrentRequest(context)) return [];
     if (results.length === 0) {
-      showError(`找不到以「${name}」為負責人的公司。`);
+      showError(`找不到「${name}」的代表人、董事、監察人或經理人登記資料。`);
       return [];
     }
 
-    if (showFullResult) renderPersonResults(name, results);
+    if (showFullResult) renderAdvancedSearchResults('person', name, results);
+    if (results.partialErrors?.length) {
+      showError(`已顯示可取得的人員查詢結果，但部分官方查詢路徑未完成：${results.partialErrors.join('；')}`);
+    }
     return results;
   } catch (err) {
     handleRequestError(context, err);
@@ -205,33 +206,72 @@ async function loadCompaniesByPerson(name, showFullResult = false, context = beg
   }
 }
 
+async function loadCompaniesByAddress(address, showFullResult = false, context = beginRequest(`查詢地址「${address}」...`)) {
+  try {
+    const results = await GCISApi.searchCompaniesByAddress(address, 80, { signal: context.signal });
+    if (!isCurrentRequest(context)) return [];
+    if (results.length === 0) {
+      showError(`找不到地址包含「${address}」的公司登記資料。`);
+      return [];
+    }
+
+    if (showFullResult) renderAdvancedSearchResults('address', address, results);
+    if (results.partialErrors?.length) {
+      showError(`已顯示可取得的地址查詢結果，但部分官方查詢路徑未完成：${results.partialErrors.join('；')}`);
+    }
+    return results;
+  } catch (err) {
+    handleRequestError(context, err);
+    return [];
+  } finally {
+    finishRequest(context);
+  }
+}
+
+function renderMatchChips(company, mode) {
+  if (mode === 'person') {
+    const roles = [...new Set((company._matchRoles || ['登記人員']).filter(Boolean))];
+    return roles.map(role => `<span class="match-chip match-chip--person">${escapeHtml(role)}</span>`).join('');
+  }
+  const matchType = company._addressMatchType || '地址相符';
+  const exact = matchType === '完整地址相同';
+  return `<span class="match-chip ${exact ? 'match-chip--exact' : 'match-chip--possible'}">${escapeHtml(matchType)}</span>`;
+}
+
 /**
- * 負責人查詢：渲染所有公司列表並建立「同名負責人」關聯圖。
- * 注意：官方資料僅能證明負責人姓名相同，不能據此確認為同一自然人。
+ * 人員姓名與地址共用結果區塊。人員關係只代表姓名及登記角色相符，不能據此確認為同一自然人。
  */
-async function renderPersonResults(name, companies) {
+function renderAdvancedSearchResults(mode, query, companies) {
   const section   = $('personSection');
   const listEl    = $('personCompanyList');
   const titleEl   = $('personResultTitle');
   const countEl   = $('personResultCount');
   const addAllBtn = $('personAddAllBtn');
+  const isPerson = mode === 'person';
 
-  titleEl.textContent = `「${name}」姓名相符的負責人公司`;
-  countEl.textContent = `共 ${companies.length} 筆｜姓名相同不代表同一人`;
+  titleEl.textContent = isPerson
+    ? `「${query}」的人員姓名查詢結果`
+    : `地址「${query}」的公司查詢結果`;
+  countEl.textContent = isPerson
+    ? `共 ${companies.length} 筆｜姓名相同不代表同一人`
+    : `共 ${companies.length} 筆｜完整同址與部分相符分開標示`;
 
-  listEl.innerHTML = companies.map(c => {
-    const status = c.Company_Status || '';
+  listEl.innerHTML = companies.map(company => {
+    const status = company.Company_Status || '';
     const badgeClass = status === '01' ? 'badge-active' : (status ? 'badge-inactive' : 'badge-unknown');
     const statusLabel = GCISApi.getStatusLabel(status);
+    const address = company.Company_Address || company.Company_Location || company._matchedAddress || '';
+    const taxNo = company.Business_Accounting_NO || '';
     return `
-      <div class="person-company-item" data-tax="${escapeHtml(c.Business_Accounting_NO || '')}">
+      <div class="person-company-item${taxNo ? '' : ' is-disabled'}" data-tax="${escapeHtml(taxNo)}">
         <div class="person-company-main">
-          <span class="person-company-name">${escapeHtml(c.Company_Name || '未知')}</span>
+          <span class="person-company-name">${escapeHtml(company.Company_Name || '未知公司')}</span>
           <span class="result-badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
         </div>
+        <div class="match-chip-row">${renderMatchChips(company, mode)}</div>
         <div class="person-company-meta">
-          <span class="mono" style="color:var(--text-3)">${escapeHtml(c.Business_Accounting_NO || '')}</span>
-          ${c.Company_Address || c.Company_Location ? `<span style="color:var(--text-3);margin-left:12px">${escapeHtml(c.Company_Address || c.Company_Location)}</span>` : ''}
+          <span class="mono" style="color:var(--text-3)">${escapeHtml(taxNo || '統編未取得')}</span>
+          ${address ? `<span class="search-result-address">${escapeHtml(address)}</span>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -239,16 +279,19 @@ async function renderPersonResults(name, companies) {
   listEl.querySelectorAll('.person-company-item').forEach(el => {
     el.addEventListener('click', () => {
       const tax = el.dataset.tax;
-      if (tax) {
-        section.style.display = 'none';
-        loadCompanyByTax(tax);
+      if (!tax) {
+        showError('此筆官方搜尋結果未提供統一編號，暫時無法載入公司詳細資料。');
+        return;
       }
+      section.style.display = 'none';
+      loadCompanyByTax(tax);
     });
   });
 
   const rebuildGraph = () => {
     personGraph.clear();
-    personGraph.addNameMatchGroup(name, companies);
+    if (isPerson) personGraph.addPersonMatchGroup(query, companies);
+    else personGraph.addAddressMatchGroup(query, companies);
   };
 
   addAllBtn.textContent = '↻ 重建關聯圖';
@@ -268,6 +311,11 @@ async function renderPersonResults(name, companies) {
   rebuildGraph();
 }
 
+// 保留舊函式名稱，避免舊事件處理引用中斷。
+function renderPersonResults(name, companies) {
+  renderAdvancedSearchResults('person', name, companies);
+}
+
 async function handleGraphNodeClick(node, graphInstance = companyGraph) {
   if (!node) return;
 
@@ -278,17 +326,7 @@ async function handleGraphNodeClick(node, graphInstance = companyGraph) {
   }
 
   if (node.type === 'person') {
-    if (node.expandMode === 'responsible') {
-      await expandResponsibleInGraph(node.personName || node.label, node.label, graphInstance);
-      return;
-    }
-    if (node.expandMode === 'name-match-group') {
-      showError('此節點只代表負責人姓名相同，尚不能確認為同一自然人。');
-      return;
-    }
-
-    const role = node.role || '此人員角色';
-    showError(`目前官方資料源不支援依「${role}」姓名反查其他公司；系統不會將其誤當成負責人關係。`);
+    await expandPersonInGraph(node.personName || node.label, node.label, graphInstance);
     return;
   }
 
@@ -298,25 +336,49 @@ async function handleGraphNodeClick(node, graphInstance = companyGraph) {
   }
 
   if (node.type === 'address') {
-    showError('目前尚未啟用依地址反查公司；此地址節點僅呈現已查得公司的完整登記地址。');
+    await expandAddressInGraph(node.fullAddress || node.searchAddress || node.label, graphInstance);
   }
 }
 
 /**
- * 依負責人姓名反查公司。新增的是「同名疑似關聯」，不直接認定為同一人。
+ * 依任何公司登記人員姓名反查公司。新增關係保留角色，但跨公司身分仍標示為疑似。
  */
-async function expandResponsibleInGraph(name, label = name, graphInstance = companyGraph) {
-  const context = beginRequest(`查詢 ${label} 的同名負責人公司...`);
+async function expandPersonInGraph(name, label = name, graphInstance = companyGraph) {
+  const context = beginRequest(`查詢 ${label} 的公司登記角色...`);
   try {
-    const companies = await GCISApi.searchCompaniesByPerson(name, 50, { signal: context.signal });
+    const companies = await GCISApi.searchCompaniesByAnyPerson(name, 80, { signal: context.signal });
     if (!isCurrentRequest(context)) return;
     if (companies.length === 0) {
-      showError(`找不到以「${label}」為負責人的其他公司。`);
+      showError(`找不到「${label}」的代表人、董事、監察人或經理人登記資料。`);
       return;
     }
 
-    graphInstance.addNameMatchGroup(name, companies);
-    showError(`已加入 ${companies.length} 家姓名相符的公司；姓名相同不代表已確認為同一人。`);
+    graphInstance.addPersonMatchGroup(name, companies);
+    const roles = [...new Set(companies.flatMap(company => company._matchRoles || []))];
+    showError(`已加入 ${companies.length} 家姓名相符公司${roles.length ? `（角色：${roles.join('、')}）` : ''}；姓名相同不代表已確認為同一人。`);
+  } catch (err) {
+    handleRequestError(context, err);
+  } finally {
+    finishRequest(context);
+  }
+}
+
+// 舊名稱保留相容性。
+const expandResponsibleInGraph = expandPersonInGraph;
+
+async function expandAddressInGraph(address, graphInstance = companyGraph) {
+  const context = beginRequest(`查詢地址「${address}」...`);
+  try {
+    const companies = await GCISApi.searchCompaniesByAddress(address, 80, { signal: context.signal });
+    if (!isCurrentRequest(context)) return;
+    if (companies.length === 0) {
+      showError(`找不到地址包含「${address}」的其他公司。`);
+      return;
+    }
+
+    graphInstance.addAddressMatchGroup(address, companies);
+    const exactCount = companies.filter(company => company._addressMatchType === '完整地址相同').length;
+    showError(`已加入 ${companies.length} 家地址相符公司，其中 ${exactCount} 家為完整地址相同；部分地址相符以疑似關聯呈現。`);
   } catch (err) {
     handleRequestError(context, err);
   } finally {
@@ -489,14 +551,14 @@ function renderCompanyCard(c) {
   `;
 
   companyCard.querySelectorAll('[data-click="person"]').forEach(el => {
-    el.addEventListener('click', () => expandResponsibleInGraph(el.dataset.val, el.dataset.val, companyGraph));
+    el.addEventListener('click', () => expandPersonInGraph(el.dataset.val, el.dataset.val, companyGraph));
   });
 }
 
 function renderInfoRow(r) {
   let val = '';
   if (r.clickType === 'person' && r.value) {
-    val = `<span class="info-value clickable" data-click="person" data-val="${escapeHtml(r.value)}" title="點擊查詢同名負責人公司（姓名相同不代表同一人）">${escapeHtml(r.value)} <small style="opacity:.5;font-size:11px">↗ 查同名</small></span>`;
+    val = `<span class="info-value clickable" data-click="person" data-val="${escapeHtml(r.value)}" title="點擊查詢此姓名的所有公司登記角色（姓名相同不代表同一人）">${escapeHtml(r.value)} <small style="opacity:.5;font-size:11px">↗ 查人員</small></span>`;
   } else if (r.mono) {
     val = `<span class="info-value" style="font-family:var(--font-mono)">${escapeHtml(r.value)}</span>`;
   } else if (r.colored) {
@@ -532,7 +594,7 @@ function renderDirectors(directors) {
             const money  = d.Invest_Money ? parseInt(d.Invest_Money).toLocaleString('zh-TW') : '—';
             return `<tr>
               <td>${escapeHtml(title)}</td>
-              <td><span class="clickable-name" data-name="${escapeHtml(name)}" data-role="${escapeHtml(title)}" title="官方資料源不支援依董監事姓名反查公司；點擊查看說明">${escapeHtml(name)} <small style="opacity:.4">ⓘ</small></span></td>
+              <td><span class="clickable-name" data-name="${escapeHtml(name)}" data-role="${escapeHtml(title)}" title="點擊查詢此姓名的代表人、董事、監察人及經理人登記">${escapeHtml(name)} <small style="opacity:.4">↗</small></span></td>
               <td>${escapeHtml(rep)}</td>
               <td style="font-family:var(--font-mono)">${money}</td>
             </tr>`;
@@ -540,9 +602,7 @@ function renderDirectors(directors) {
         </tbody>
       </table>`;
     directorsTable.querySelectorAll('.clickable-name').forEach(el => {
-      el.addEventListener('click', () => {
-        showError(`目前官方資料源不支援依「${el.dataset.role || '董監事'}」姓名反查其他公司，為避免誤判不會改用負責人 API。`);
-      });
+      el.addEventListener('click', () => expandPersonInGraph(el.dataset.name, el.dataset.name, companyGraph));
     });
     directorsPanel.style.display = 'block';
   } else {
@@ -558,14 +618,12 @@ function renderDirectors(directors) {
         <tbody>
           ${mgrList.map(d => `<tr>
             <td>${escapeHtml(d.Title || '經理人')}</td>
-            <td><span class="clickable-name" data-name="${escapeHtml(d.Name || '')}" data-role="${escapeHtml(d.Title || '經理人')}" title="官方資料源不支援依經理人姓名反查公司；點擊查看說明">${escapeHtml(d.Name || '—')} <small style="opacity:.4">ⓘ</small></span></td>
+            <td><span class="clickable-name" data-name="${escapeHtml(d.Name || '')}" data-role="${escapeHtml(d.Title || '經理人')}" title="點擊查詢此姓名的代表人、董事、監察人及經理人登記">${escapeHtml(d.Name || '—')} <small style="opacity:.4">↗</small></span></td>
           </tr>`).join('')}
         </tbody>
       </table>`;
     managersTable.querySelectorAll('.clickable-name').forEach(el => {
-      el.addEventListener('click', () => {
-        showError(`目前官方資料源不支援依「${el.dataset.role || '經理人'}」姓名反查其他公司，為避免誤判不會改用負責人 API。`);
-      });
+      el.addEventListener('click', () => expandPersonInGraph(el.dataset.name, el.dataset.name, companyGraph));
     });
     managersPanel.style.display = 'block';
   } else {

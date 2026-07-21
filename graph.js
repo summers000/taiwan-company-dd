@@ -4,7 +4,8 @@
  * 第一階段資料正確性調整：
  * - 人員節點以「公司＋角色＋姓名」建立識別，不再把所有同名者直接合併。
  * - 地址使用完整正規化地址作為識別，不再只取前 20 個字。
- * - 依負責人姓名反查的結果，以「同名關聯（未確認同一人）」呈現。
+ * - 人員姓名可查代表人、董事、監察人、經理人及法人代表；跨公司同名仍標示待確認。
+ * - 地址節點可直接反查相同或相近登記地址公司。
  */
 
 function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
@@ -26,6 +27,9 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
     法人代表: '#ff7043',
     分公司: '#aaccff',
     同名負責人: '#e8c84a',
+    同一登記地址: '#5dde8a',
+    地址相符: '#7fdba0',
+    登記人員: '#e8c84a',
     default: '#6878a8',
   };
 
@@ -201,7 +205,7 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
           role: '代表人',
           personName: responsible,
           companyTaxNo: taxNo,
-          expandMode: 'responsible',
+          expandMode: 'person',
           identityStatus: 'name-only',
         }
       );
@@ -239,7 +243,7 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
             personName,
             companyTaxNo: taxNo,
             representedEntity,
-            expandMode: 'unsupported-person-role',
+            expandMode: 'person',
             identityStatus: 'name-only',
           }
         );
@@ -253,7 +257,7 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
             role,
             personName,
             companyTaxNo: taxNo,
-            expandMode: role.includes('經理') ? 'unsupported-manager-role' : 'unsupported-director-role',
+            expandMode: 'person',
             identityStatus: 'name-only',
           }
         );
@@ -280,19 +284,19 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
   }
 
   /**
-   * 依官方「負責人姓名」反查後建立的同名群組。
-   * 此群組只代表姓名相符，不代表已確認為同一自然人。
+   * 依任何公司登記人員姓名建立查詢群組。
+   * 每一筆角色來自官方登記，但跨公司是否為同一自然人仍屬待確認。
    */
-  function addNameMatchGroup(name, companies = []) {
+  function addPersonMatchGroup(name, companies = []) {
     if (!canvas || !name) return;
     const matchNode = getOrCreate(
       'person',
-      `name-match:${normalizePerson(name)}`,
+      `person-search:${normalizePerson(name)}`,
       name,
       {
-        role: '同名負責人（未確認同一人）',
+        role: '公司登記人員（同名待確認）',
         personName: name,
-        expandMode: 'name-match-group',
+        expandMode: 'person-match-group',
         identityStatus: 'unverified-name-match',
         uncertain: true,
       }
@@ -307,8 +311,53 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
         fullData: company,
         expandMode: 'company',
       });
-      getOrCreateEdge(companyNode.id, matchNode.id, '同名負責人', { certainty: 'suspected' });
+      const roles = [...new Set((company._matchRoles || ['登記人員']).filter(Boolean))];
+      const label = roles.length > 0 ? roles.join('／') : '登記人員';
+      getOrCreateEdge(companyNode.id, matchNode.id, label, {
+        certainty: 'suspected',
+        matchRoles: roles,
+      });
       addAddress(companyNode, company.Company_Location || company.Company_Address || '');
+    });
+
+    const empty = byId(emptyId);
+    if (empty) empty.style.display = 'none';
+    updateInfo();
+    startSim();
+  }
+
+  // 舊名稱保留相容性。
+  const addNameMatchGroup = addPersonMatchGroup;
+
+  /**
+   * 依地址查詢建立群組。完整正規化地址相同列為已確認；部分相符列為疑似。
+   */
+  function addAddressMatchGroup(address, companies = []) {
+    if (!canvas || !address) return;
+    const queryKey = normalizeAddress(address);
+    if (!queryKey) return;
+
+    const addressNode = getOrCreate('address', `address-search:${queryKey}`, address, {
+      fullAddress: address,
+      expandMode: 'address-search-group',
+      searchAddress: address,
+    });
+
+    companies.forEach(company => {
+      const taxNo = String(company.Business_Accounting_NO || '').trim();
+      const companyName = company.Company_Name || taxNo || '未知公司';
+      const companyKey = taxNo || `name:${normalizeCompany(companyName)}`;
+      const companyNode = getOrCreate('company', companyKey, companyName, {
+        taxNo,
+        fullData: company,
+        expandMode: 'company',
+      });
+      const registeredAddress = company.Company_Location || company.Company_Address || company._matchedAddress || '';
+      const exact = Boolean(registeredAddress && normalizeAddress(registeredAddress) === queryKey);
+      getOrCreateEdge(companyNode.id, addressNode.id, exact ? '同一登記地址' : '地址相符', {
+        certainty: exact ? 'confirmed' : 'suspected',
+        registeredAddress,
+      });
     });
 
     const empty = byId(emptyId);
@@ -667,16 +716,17 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
     if (node.type === 'company' && node.taxNo) text += `\n統編：${node.taxNo}`;
     if (node.type === 'person') {
       if (node.role) text += `（${node.role}）`;
-      if (node.expandMode === 'responsible') {
-        text += '\n點擊查詢同名負責人公司\n注意：姓名相同不代表同一人';
-      } else if (node.expandMode === 'name-match-group') {
-        text += '\n此為姓名相符的疑似關聯，尚未確認為同一人';
+      if (node.expandMode === 'person-match-group') {
+        text += '\n此群組顯示姓名與登記角色相符\n跨公司是否為同一人仍待確認';
       } else {
-        text += '\n目前官方資料源不支援依此角色反查公司';
+        text += '\n點擊查詢此姓名的代表人、董事、監察人及經理人登記\n注意：姓名相同不代表同一人';
       }
     }
     if (node.type === 'legalEntity') text += '\n點擊以法人名稱查詢公司';
-    if (node.type === 'address') text = node.fullAddress || node.label;
+    if (node.type === 'address') {
+      text = node.fullAddress || node.label;
+      text += '\n點擊查詢相同或相近登記地址的公司';
+    }
 
     tooltip.textContent = text;
     tooltip.style.left = `${screenX + 14}px`;
@@ -696,7 +746,7 @@ function createRelationGraph({ canvasId, emptyId, infoId, exportFileName }) {
     link.click();
   }
 
-  return { init, addCompany, addNameMatchGroup, clear, exportPNG, getStats };
+  return { init, addCompany, addNameMatchGroup, addPersonMatchGroup, addAddressMatchGroup, clear, exportPNG, getStats };
 }
 
 /**

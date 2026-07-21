@@ -172,10 +172,9 @@
                 <span class="preview-label" style="margin-left:16px">偵測欄位</span>
                 <span id="batchDetected" class="preview-value"></span>
               </div>
-              <div style="display:flex;gap:8px;align-items:center">
-                <button id="batchRunBtn" class="search-btn" disabled>
-                  ▶ 開始比對
-                </button>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button id="batchRunBtn" class="search-btn" disabled>▶ 開始比對</button>
+                <button id="dupAnalysisBtn" class="btn-outline" disabled>⊕ 重複分析</button>
                 <button id="batchClearBtn" class="btn-ghost btn-sm">重置</button>
               </div>
             </div>
@@ -199,18 +198,32 @@
                   <tr>
                     <th>#</th>
                     <th>輸入統編</th>
-                    <th>輸入公司名稱</th>
-                    <th>查到公司名稱</th>
+                    <th>輸入公司名</th>
+                    <th>查詢公司名</th>
                     <th>統一編號</th>
                     <th>狀態</th>
                     <th>負責人</th>
-                    <th>設立日期</th>
-                    <th>資本額</th>
                     <th>風險標註</th>
-                    <th>比對方式</th>
+                    <th>資料來源</th>
                   </tr>
                 </thead>
                 <tbody id="batchResultBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 重複分析結果 -->
+          <div id="dupSection" style="display:none">
+            <div class="batch-result-header" style="margin-top:32px">
+              <span class="panel-label">內部重複分析</span>
+              <span id="dupCount" class="record-count"></span>
+            </div>
+            <div class="batch-table-wrap">
+              <table class="data-table batch-table">
+                <thead>
+                  <tr><th>重複類型</th><th>重複值</th><th>筆數</th><th>涉及列號</th></tr>
+                </thead>
+                <tbody id="dupResultBody"></tbody>
               </table>
             </div>
           </div>

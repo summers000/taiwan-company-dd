@@ -13,6 +13,7 @@
     s.onerror=function(){console.warn("SheetJS 未載入，請將 Excel 另存為 CSV");};
     document.head.appendChild(s);
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -30,6 +31,7 @@
       <nav class="header-nav">
         <button class="nav-btn active" data-page="search">公司基本資料查詢</button>
         <button class="nav-btn" data-page="batch">正確性及重複性比對</button>
+        <button class="nav-btn" data-page="supplier">供應商績效分析</button>
       </nav>
       <div class="header-note">官方公司資料＋人工查核紀錄</div>
     </div>
@@ -384,6 +386,148 @@
       </section>
     </div><!-- /page-batch -->
 
+    <!-- ══════════════════════════════
+         PAGE 3：供應商績效分析
+    ══════════════════════════════ -->
+    <div id="page-supplier" style="display:none">
+      <section class="supplier-page">
+        <div class="supplier-shell">
+          <section class="supplier-intro-card">
+            <div class="supplier-intro-heading">
+              <div>
+                <span class="supplier-eyebrow">SUPPLIER PERFORMANCE &amp; AUDIT ANALYTICS</span>
+                <h2>供應商績效貢獻與異常分析</h2>
+                <p>上傳同一年度各月份的累計報表，系統會以相鄰月份累計差額還原單月數，並產出管理總覽、月度趨勢、供應商貢獻及稽核優先清單。</p>
+              </div>
+              <div class="supplier-intro-badge">累計月報版</div>
+            </div>
+
+            <div class="supplier-local-note">
+              <strong>本機處理</strong>
+              <span>Excel 只在目前瀏覽器中解析，不會送至 DD 平台或 Cloudflare Worker；重新整理頁面後資料即清除。</span>
+            </div>
+
+            <div class="supplier-upload-layout">
+              <div id="supplierDropZone" class="supplier-drop-zone">
+                <div class="supplier-drop-icon">▣</div>
+                <h3>一次上傳多個月份的累計報表</h3>
+                <p>建議至少上傳兩個連續月份；若包含 1 月，即可自 1 月起完整還原單月趨勢。</p>
+                <label class="supplier-file-button">
+                  選擇 Excel／CSV
+                  <input type="file" id="supplierFileInput" accept=".xlsx,.xls,.csv" multiple hidden>
+                </label>
+                <span class="supplier-drop-hint">支援拖曳多檔；系統會嘗試從檔名辨識報表月份</span>
+              </div>
+
+              <div class="supplier-schema-card">
+                <h3>固定欄位結構</h3>
+                <div class="supplier-schema-tags">
+                  <span>Grp</span><span>Sec</span><span>Sup</span><span>Vendorname</span>
+                  <span>年度 Sales／Pur／GP$</span><span>TT／PD／BI／OI</span><span>GP+BI+OI 總計</span>
+                </div>
+                <p>年度由欄位自動辨識，例如 2025／2024；比率欄位可使用 25GP% 或 2025GP%。</p>
+                <p>本版暫依現有報表邏輯：GP% 以 Sales 重算；TT／PD／BI／OI／總計比率以 Pur 重算，並與 Excel 原始比率交叉檢查。</p>
+                <button type="button" id="supplierDemoBtn" class="btn-outline">載入示範資料</button>
+              </div>
+            </div>
+
+            <div id="supplierMessage" class="supplier-message supplier-message-info hidden"></div>
+
+            <div id="supplierFileSection" class="supplier-file-section hidden">
+              <div class="supplier-section-heading">
+                <div>
+                  <h3>已讀取的月報</h3>
+                  <p>請確認每個檔案的報表月份。月份必須唯一，且同一批次應屬於相同本年度。</p>
+                </div>
+                <div class="supplier-file-actions">
+                  <button type="button" id="supplierClearBtn" class="btn-ghost">清除</button>
+                  <button type="button" id="supplierAnalyzeBtn" class="search-btn" disabled>產出分析儀表板</button>
+                </div>
+              </div>
+              <div class="supplier-table-scroll">
+                <table class="data-table supplier-file-table">
+                  <thead><tr><th>檔案</th><th>工作表</th><th>偵測年度</th><th>報表月份</th><th>狀態</th><th></th></tr></thead>
+                  <tbody id="supplierFileBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="supplierDashboard" class="supplier-dashboard hidden">
+            <div class="supplier-dashboard-header">
+              <div>
+                <span class="supplier-eyebrow">ANALYSIS DASHBOARD</span>
+                <h2>供應商績效儀表板</h2>
+                <p id="supplierDashboardMeta"></p>
+              </div>
+              <div class="supplier-dashboard-actions">
+                <div class="supplier-view-switch" aria-label="輸出用途">
+                  <button type="button" class="active" data-supplier-view="audit">稽核內部版</button>
+                  <button type="button" data-supplier-view="communication">受查單位版</button>
+                </div>
+                <button type="button" id="supplierExportBtn" class="btn-outline">匯出異常 CSV</button>
+                <button type="button" id="supplierPrintBtn" class="btn-ghost">列印／另存 PDF</button>
+              </div>
+            </div>
+
+            <div class="supplier-filter-bar">
+              <label>分析月份<select id="supplierMonthFilter"></select></label>
+              <label>Grp<select id="supplierGrpFilter"><option value="">全部 Grp</option></select></label>
+              <label>Sec<select id="supplierSecFilter"><option value="">全部 Sec</option></select></label>
+              <label class="supplier-filter-vendor">供應商<select id="supplierVendorFilter"><option value="">全部供應商</option></select></label>
+            </div>
+
+            <div id="supplierQualitySummary" class="supplier-quality"></div>
+            <div id="supplierKpiGrid" class="supplier-kpi-grid"></div>
+
+            <div class="supplier-chart-grid">
+              <article class="supplier-chart-card supplier-chart-wide"><canvas id="supplierSalesTrendChart"></canvas></article>
+              <article class="supplier-chart-card"><canvas id="supplierRateTrendChart"></canvas></article>
+              <article class="supplier-chart-card"><canvas id="supplierRiskChart"></canvas></article>
+              <article class="supplier-chart-card"><canvas id="supplierTopChart"></canvas></article>
+              <article class="supplier-chart-card"><canvas id="supplierGroupChart"></canvas></article>
+              <article class="supplier-chart-card supplier-chart-wide"><canvas id="supplierScatterChart"></canvas></article>
+            </div>
+
+            <section class="supplier-risk-section">
+              <div class="supplier-section-heading">
+                <div>
+                  <h3 id="supplierRiskTitle">稽核優先查核清單</h3>
+                  <p id="supplierRiskSubtitle">依風險分數排序，供稽核規劃與抽樣使用。</p>
+                </div>
+                <span id="supplierRiskCount" class="record-count"></span>
+              </div>
+              <div class="supplier-table-scroll">
+                <table class="data-table supplier-risk-table">
+                  <thead>
+                    <tr><th>等級／分數</th><th>Grp</th><th>Sec</th><th>供應商</th><th>YTD Sales</th><th>YTD GP%</th><th>YTD 總貢獻</th><th>異常／變動</th><th>建議處理</th></tr>
+                  </thead>
+                  <tbody id="supplierRiskBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section id="supplierDetailPanel" class="supplier-detail-panel hidden">
+              <div class="supplier-section-heading">
+                <div>
+                  <h3 id="supplierDetailTitle">供應商明細</h3>
+                  <p id="supplierDetailMeta"></p>
+                </div>
+                <button type="button" id="supplierDetailCloseBtn" class="btn-ghost btn-sm">關閉</button>
+              </div>
+              <div id="supplierDetailKpis" class="supplier-detail-kpis"></div>
+              <div class="supplier-table-scroll">
+                <table class="data-table">
+                  <thead><tr><th>月份</th><th>單月 Sales</th><th>單月 GP$</th><th>單月 GP%</th><th>YTD Sales</th><th>YTD 總貢獻</th><th>YTD 總貢獻率</th></tr></thead>
+                  <tbody id="supplierDetailBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </div><!-- /page-supplier -->
+
     <!-- 新增外部查核紀錄 -->
     <div id="ddEvidenceModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="ddEvidenceModalTitle">
       <div class="modal-card">
@@ -465,6 +609,7 @@
   <script src="dd.js"></script>
   <script src="app.js"></script>
   <script src="batch.js"></script>
+  <script src="supplier.js"></script>
   <script>
     // ── 頁面切換 ──
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -472,8 +617,9 @@
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const page = btn.dataset.page;
-        document.getElementById('page-search').style.display = page === 'search' ? 'block' : 'none';
-        document.getElementById('page-batch').style.display  = page === 'batch'  ? 'block' : 'none';
+        document.getElementById('page-search').style.display   = page === 'search'   ? 'block' : 'none';
+        document.getElementById('page-batch').style.display    = page === 'batch'    ? 'block' : 'none';
+        document.getElementById('page-supplier').style.display = page === 'supplier' ? 'block' : 'none';
       });
     });
 
@@ -489,7 +635,10 @@
     });
 
     // ── 初始化批次模組 ──
-    document.addEventListener('DOMContentLoaded', () => Batch.init());
+    document.addEventListener('DOMContentLoaded', () => {
+      Batch.init();
+      SupplierPerformance.init();
+    });
   </script>
 </body>
 </html>

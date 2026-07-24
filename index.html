@@ -397,7 +397,7 @@
               <div>
                 <span class="supplier-eyebrow">SUPPLIER PERFORMANCE &amp; AUDIT ANALYTICS</span>
                 <h2>供應商績效貢獻與異常分析</h2>
-                <p>上傳同一年度各月份的累計報表，系統會以相鄰月份累計差額還原單月數，並產出管理總覽、月度趨勢、供應商貢獻及稽核優先清單。</p>
+                <p>上傳同一年度各月份的累計報表，系統會以相鄰月份累計差額還原單月數，並先彙整本期主要問題，再由下方各分析區塊說明績效、趨勢、集中情形與建議釐清方向。</p>
               </div>
               <div class="supplier-intro-badge">累計月報版</div>
             </div>
@@ -456,16 +456,12 @@
           <section id="supplierDashboard" class="supplier-dashboard hidden">
             <div class="supplier-dashboard-header">
               <div>
-                <span class="supplier-eyebrow">ANALYSIS DASHBOARD</span>
-                <h2>供應商績效儀表板</h2>
+                <span class="supplier-eyebrow">SUPPLIER PERFORMANCE REVIEW</span>
+                <h2>供應商績效問題總覽</h2>
                 <p id="supplierDashboardMeta"></p>
               </div>
               <div class="supplier-dashboard-actions">
-                <div class="supplier-view-switch" aria-label="輸出用途">
-                  <button type="button" class="active" data-supplier-view="audit">稽核內部版</button>
-                  <button type="button" data-supplier-view="communication">受查單位版</button>
-                </div>
-                <button type="button" id="supplierExportBtn" class="btn-outline">匯出異常 CSV</button>
+                <button type="button" id="supplierExportBtn" class="btn-outline">匯出問題清單 CSV</button>
                 <button type="button" id="supplierPrintBtn" class="btn-ghost">列印／另存 PDF</button>
               </div>
             </div>
@@ -478,29 +474,54 @@
             </div>
 
             <div id="supplierQualitySummary" class="supplier-quality"></div>
-            <div id="supplierKpiGrid" class="supplier-kpi-grid"></div>
 
-            <div class="supplier-chart-grid">
-              <article class="supplier-chart-card supplier-chart-wide"><canvas id="supplierSalesTrendChart"></canvas></article>
-              <article class="supplier-chart-card"><canvas id="supplierRateTrendChart"></canvas></article>
-              <article class="supplier-chart-card"><canvas id="supplierRiskChart"></canvas></article>
-              <article class="supplier-chart-card"><canvas id="supplierTopChart"></canvas></article>
-              <article class="supplier-chart-card"><canvas id="supplierGroupChart"></canvas></article>
-              <article class="supplier-chart-card supplier-chart-wide"><canvas id="supplierScatterChart"></canvas></article>
-            </div>
-
-            <section class="supplier-risk-section">
-              <div class="supplier-section-heading">
-                <div>
-                  <h3 id="supplierRiskTitle">稽核優先查核清單</h3>
-                  <p id="supplierRiskSubtitle">依風險分數排序，供稽核規劃與抽樣使用。</p>
-                </div>
-                <span id="supplierRiskCount" class="record-count"></span>
+            <!-- 問題摘要：首頁第一視覺層 -->
+            <section id="supplierExecutiveSummary" class="supplier-story-hero" aria-label="問題摘要"></section>
+            <section class="supplier-story-section supplier-story-section-issues">
+              <div class="supplier-story-heading">
+                <span>01</span>
+                <div><h3>本期主要問題</h3><p>摘要卡片是下方詳細分析的入口；點擊後可聚焦對應問題。</p></div>
               </div>
+              <div id="supplierIssueGrid" class="supplier-issue-grid"></div>
+            </section>
+
+            <!-- 詳細說明：與上方摘要逐一對應 -->
+            <section class="supplier-story-section supplier-story-section-performance" id="supplierPerformanceSection">
+              <div class="supplier-story-heading">
+                <span>02</span>
+                <div><h3>整體績效與月度變化</h3><p>先確認累計績效，再觀察單月走勢是否支持本期結果。</p></div>
+              </div>
+              <div id="supplierKpiGrid" class="supplier-kpi-grid supplier-kpi-bento"></div>
+              <div class="supplier-chart-grid supplier-chart-grid-story">
+                <article class="supplier-chart-card supplier-chart-feature"><canvas id="supplierSalesTrendChart"></canvas></article>
+                <article class="supplier-chart-card"><canvas id="supplierRateTrendChart"></canvas></article>
+              </div>
+            </section>
+
+            <section class="supplier-story-section supplier-story-section-contribution" id="supplierContributionSection">
+              <div class="supplier-story-heading">
+                <span>03</span>
+                <div><h3>貢獻結構與集中情形</h3><p>由供應商、Grp 與四象限三個角度，說明績效由誰貢獻及是否過度集中。</p></div>
+              </div>
+              <div class="supplier-chart-grid supplier-chart-grid-bento">
+                <article class="supplier-chart-card supplier-chart-tall"><canvas id="supplierTopChart"></canvas></article>
+                <article class="supplier-chart-card"><canvas id="supplierGroupChart"></canvas></article>
+                <article class="supplier-chart-card"><canvas id="supplierRiskChart"></canvas></article>
+                <article class="supplier-chart-card supplier-chart-wide"><canvas id="supplierScatterChart"></canvas></article>
+              </div>
+            </section>
+
+            <section class="supplier-story-section supplier-story-section-findings" id="supplierFindingSection">
+              <div class="supplier-story-heading supplier-story-heading-with-action">
+                <span>04</span>
+                <div><h3 id="supplierRiskTitle">問題明細與建議查核方向</h3><p id="supplierRiskSubtitle">依問題程度排序，說明變動原因、影響與後續應釐清事項。</p></div>
+                <button type="button" id="supplierIssueClearBtn" class="btn-ghost btn-sm hidden">顯示全部問題</button>
+              </div>
+              <span id="supplierRiskCount" class="record-count supplier-risk-count"></span>
               <div class="supplier-table-scroll">
                 <table class="data-table supplier-risk-table">
                   <thead>
-                    <tr><th>等級／分數</th><th>Grp</th><th>Sec</th><th>供應商</th><th>YTD Sales</th><th>YTD GP%</th><th>YTD 總貢獻</th><th>異常／變動</th><th>建議處理</th></tr>
+                    <tr><th>程度／分數</th><th>Grp</th><th>Sec</th><th>供應商</th><th>YTD Sales</th><th>YTD GP%</th><th>YTD 總貢獻</th><th>問題摘要</th><th>建議釐清方向</th></tr>
                   </thead>
                   <tbody id="supplierRiskBody"></tbody>
                 </table>
@@ -509,10 +530,7 @@
 
             <section id="supplierDetailPanel" class="supplier-detail-panel hidden">
               <div class="supplier-section-heading">
-                <div>
-                  <h3 id="supplierDetailTitle">供應商明細</h3>
-                  <p id="supplierDetailMeta"></p>
-                </div>
+                <div><h3 id="supplierDetailTitle">供應商明細</h3><p id="supplierDetailMeta"></p></div>
                 <button type="button" id="supplierDetailCloseBtn" class="btn-ghost btn-sm">關閉</button>
               </div>
               <div id="supplierDetailKpis" class="supplier-detail-kpis"></div>

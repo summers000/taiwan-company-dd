@@ -26,7 +26,7 @@ const SupplierPerformance = (() => {
     selectedGrp: '',
     selectedSec: '',
     selectedVendor: '',
-    viewMode: 'audit',
+    selectedIssueCategory: '',
     riskEntries: [],
     selectedDetailKey: '',
     initialized: false,
@@ -64,14 +64,20 @@ const SupplierPerformance = (() => {
     ['supplierMonthFilter', 'supplierGrpFilter', 'supplierSecFilter', 'supplierVendorFilter']
       .forEach(id => el(id).addEventListener('change', onFilterChange));
 
-    document.querySelectorAll('[data-supplier-view]').forEach(button => {
-      button.addEventListener('click', () => {
-        document.querySelectorAll('[data-supplier-view]').forEach(item => item.classList.remove('active'));
-        button.classList.add('active');
-        state.viewMode = button.dataset.supplierView;
-        renderRiskTable();
-        renderModeText();
-      });
+    el('supplierIssueGrid').addEventListener('click', event => {
+      const card = event.target.closest('[data-issue-category]');
+      if (!card) return;
+      const category = card.dataset.issueCategory || '';
+      state.selectedIssueCategory = state.selectedIssueCategory === category ? '' : category;
+      renderIssueSummary();
+      renderRiskTable();
+      el('supplierFindingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    el('supplierIssueClearBtn').addEventListener('click', () => {
+      state.selectedIssueCategory = '';
+      renderIssueSummary();
+      renderRiskTable();
     });
 
     el('supplierRiskBody').addEventListener('click', event => {
@@ -570,8 +576,9 @@ const SupplierPerformance = (() => {
     const rows = getFilteredRows(snapshot);
     state.riskEntries = buildRiskEntries(snapshot, rows);
 
-    renderModeText();
     renderSummaryMeta(snapshot, rows);
+    renderExecutiveSummary(snapshot, rows);
+    renderIssueSummary();
     renderQualitySummary(snapshot);
     renderKpis(snapshot, rows);
     renderCharts(snapshot, rows);
@@ -579,12 +586,93 @@ const SupplierPerformance = (() => {
     renderSupplierDetail();
   }
 
-  function renderModeText() {
-    const audit = state.viewMode === 'audit';
-    el('supplierRiskTitle').textContent = audit ? '稽核優先查核清單' : '顯著變動與待說明事項';
-    el('supplierRiskSubtitle').textContent = audit
-      ? '依風險分數排序，供稽核規劃與抽樣使用。'
-      : '以中性文字呈現，適合與受查單位進行事實確認。';
+
+  function findingCategory(finding) {
+    const code = finding?.code || '';
+    if (['negative-gp', 'gp-rate-drop', 'sales-up-total-down', 'negative-monthly-gp'].includes(code)) return 'profitability';
+    if (['sales-up', 'sales-down', 'rank-change', 'monthly-spike', 'negative-monthly-sales', 'new-vendor'].includes(code)) return 'volatility';
+    if (code === 'concentration') return 'concentration';
+    if ((finding?.auditLabel || '').startsWith('資料品質：')) return 'data';
+    return 'other';
+  }
+
+  function issueCategoryLabel(category) {
+    return ({
+      profitability: '獲利與貢獻',
+      volatility: '變動與趨勢',
+      concentration: '集中風險',
+      data: '資料品質',
+      other: '其他事項',
+    })[category] || '全部問題';
+  }
+
+  function issueCategoryDescription(category) {
+    return ({
+      profitability: '毛利、毛利率或總貢獻未與業績同步，需釐清交易條件與認列完整性。',
+      volatility: '營業額、排名或單月數值出現顯著變化，需確認是否為一次性或持續性事件。',
+      concentration: '單一供應商在 Sec 的占比偏高，需評估替代性、議價能力與管理風險。',
+      data: '來源資料或公式勾稽存在差異，應先確認資料可靠性再判斷績效。',
+      other: '其他需要進一步說明或追蹤的事項。',
+    })[category] || '';
+  }
+
+  function renderExecutiveSummary(snapshot, rows) {
+    const current = aggregateRows(rows, 'current');
+    const prior = aggregateRows(rows, 'prior');
+    const totalGrowth = growth(current.total, prior.total);
+    const salesGrowth = growth(current.sales, prior.sales);
+    const gpRateChange = difference(current.gpRate, prior.gpRate);
+    const urgent = state.riskEntries.filter(entry => ['critical', 'high'].includes(entry.severity)).length;
+    const categories = ['profitability', 'volatility', 'concentration', 'data'];
+    const categoryCounts = categories.map(category => ({
+      category,
+      count: state.riskEntries.filter(entry => entry.findings.some(finding => findingCategory(finding) === category)).length,
+    })).sort((a, b) => b.count - a.count);
+    const top = categoryCounts[0];
+
+    let headline = `${formatMonth(snapshot.reportMonth)}供應商績效整體維持穩定`;
+    if (urgent > 0) headline = `${urgent} 家供應商需要優先釐清`;
+    else if (totalGrowth !== null && totalGrowth < -.05) headline = `總貢獻較去年同期下降 ${formatPercent(Math.abs(totalGrowth))}`;
+    else if (gpRateChange !== null && gpRateChange < -.02) headline = `整體毛利率下降 ${formatPercentagePoints(Math.abs(gpRateChange))}`;
+
+    const narrative = [
+      totalGrowth === null ? '總貢獻缺少可比較基準' : `總貢獻較去年同期${totalGrowth >= 0 ? '增加' : '下降'} ${formatPercent(Math.abs(totalGrowth))}`,
+      salesGrowth === null ? 'Sales 缺少可比較基準' : `Sales ${salesGrowth >= 0 ? '增加' : '下降'} ${formatPercent(Math.abs(salesGrowth))}`,
+      gpRateChange === null ? 'GP% 缺少可比較基準' : `GP% ${gpRateChange >= 0 ? '提升' : '下降'} ${formatPercentagePoints(Math.abs(gpRateChange))}`,
+    ].join('；') + '。';
+
+    el('supplierExecutiveSummary').innerHTML = `
+      <div class="supplier-hero-main">
+        <span class="supplier-hero-kicker">${escapeHtml(snapshot.currentYear + ' 年截至 ' + Number(snapshot.reportMonth.slice(5, 7)) + ' 月')}</span>
+        <h3>${escapeHtml(headline)}</h3>
+        <p>${escapeHtml(narrative)}</p>
+        <div class="supplier-hero-focus">主要問題集中於：<strong>${escapeHtml(top?.count ? issueCategoryLabel(top.category) : '目前未發現重大問題')}</strong>${top?.count ? `（${top.count} 家）` : ''}</div>
+      </div>
+      <div class="supplier-hero-metrics">
+        <article><span>YTD 總貢獻</span><strong>${escapeHtml(formatMoneyCompact(current.total))}</strong><small>${escapeHtml(growthLabel(current.total, prior.total, '去年同期'))}</small></article>
+        <article><span>YTD GP%</span><strong>${escapeHtml(formatPercent(current.gpRate))}</strong><small>${escapeHtml(percentagePointLabel(current.gpRate, prior.gpRate))}</small></article>
+        <article class="supplier-hero-alert"><span>優先關注</span><strong>${urgent}</strong><small>重大或高程度供應商</small></article>
+      </div>`;
+  }
+
+  function renderIssueSummary() {
+    const categories = ['profitability', 'volatility', 'concentration', 'data'];
+    const cards = categories.map(category => {
+      const entries = state.riskEntries.filter(entry => entry.findings.some(finding => findingCategory(finding) === category));
+      const findingCount = entries.reduce((sum, entry) => sum + entry.findings.filter(finding => findingCategory(finding) === category).length, 0);
+      const selected = state.selectedIssueCategory === category;
+      const topNames = entries.slice(0, 2).map(entry => entry.row.vendorName || entry.row.sup).join('、');
+      return `
+        <button type="button" class="supplier-issue-card supplier-issue-${category}${selected ? ' active' : ''}" data-issue-category="${category}">
+          <span class="supplier-issue-index">${String(categories.indexOf(category) + 1).padStart(2, '0')}</span>
+          <strong>${escapeHtml(issueCategoryLabel(category))}</strong>
+          <b>${entries.length}</b>
+          <p>${escapeHtml(issueCategoryDescription(category))}</p>
+          <small>${findingCount} 項問題${topNames ? `｜${escapeHtml(topNames)}` : ''}</small>
+          <em>${selected ? '已聚焦，點擊取消' : '查看明細 →'}</em>
+        </button>`;
+    });
+    el('supplierIssueGrid').innerHTML = cards.join('');
   }
 
   function renderSummaryMeta(snapshot, rows) {
@@ -632,7 +720,7 @@ const SupplierPerformance = (() => {
       { label: 'YTD BI + OI', value: formatMoneyCompact(current.bi + current.oi), sub: growthLabel(current.bi + current.oi, prior.bi + prior.oi, '去年同期') },
       { label: 'YTD 總貢獻', value: formatMoneyCompact(current.total), sub: growthLabel(current.total, prior.total, '去年同期') },
       { label: 'YTD 總貢獻率', value: formatPercent(current.totalRate), sub: percentagePointLabel(current.totalRate, prior.totalRate) },
-      { label: state.viewMode === 'audit' ? '高風險供應商' : '優先釐清項目', value: formatInteger(highRisk), sub: `共 ${state.riskEntries.length} 家觸發規則` },
+      { label: '優先關注供應商', value: formatInteger(highRisk), sub: `共 ${state.riskEntries.length} 家觸發規則` },
     ];
 
     el('supplierKpiGrid').innerHTML = cards.map(card => `
@@ -845,9 +933,7 @@ const SupplierPerformance = (() => {
     createChart('supplierRiskChart', {
       type: 'doughnut',
       data: {
-        labels: state.viewMode === 'audit'
-          ? ['重大', '高', '中', '低']
-          : ['優先釐清', '建議釐清', '留意', '一般提醒'],
+        labels: ['重大', '高', '中', '低'],
         datasets: [{
           data: [counts.critical, counts.high, counts.medium, counts.low],
           backgroundColor: ['#9b1c1c', '#d34c4c', '#d79b1e', '#4b86c6'],
@@ -858,7 +944,7 @@ const SupplierPerformance = (() => {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          title: chartTitle(state.viewMode === 'audit' ? '稽核風險分布' : '待說明項目分布'),
+          title: chartTitle('問題程度分布'),
           legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
           tooltip: { callbacks: { label: context => `${context.label}：${context.raw} 家` } },
         },
@@ -1031,23 +1117,28 @@ const SupplierPerformance = (() => {
   }
 
   function renderRiskTable() {
-    const audit = state.viewMode === 'audit';
     const body = el('supplierRiskBody');
-    el('supplierRiskCount').textContent = `${state.riskEntries.length} 家`;
+    const visibleEntries = state.selectedIssueCategory
+      ? state.riskEntries.filter(entry => entry.findings.some(finding => findingCategory(finding) === state.selectedIssueCategory))
+      : state.riskEntries;
+    el('supplierRiskCount').textContent = state.selectedIssueCategory
+      ? `${issueCategoryLabel(state.selectedIssueCategory)}｜${visibleEntries.length} 家`
+      : `${visibleEntries.length} 家`;
+    el('supplierIssueClearBtn')?.classList.toggle('hidden', !state.selectedIssueCategory);
 
-    if (!state.riskEntries.length) {
+    if (!visibleEntries.length) {
       body.innerHTML = `<tr><td colspan="9" class="supplier-empty-cell">目前篩選範圍未觸發異常規則。</td></tr>`;
       return;
     }
 
-    body.innerHTML = state.riskEntries.map(entry => {
+    body.innerHTML = visibleEntries.map(entry => {
       const primary = entry.findings.slice(0, 3);
-      const labels = primary.map(finding => audit ? finding.auditLabel : finding.communicationLabel);
-      const questions = unique(primary.map(finding => audit ? finding.auditQuestion : finding.communicationQuestion));
+      const labels = primary.map(finding => finding.auditLabel);
+      const questions = unique(primary.map(finding => finding.auditQuestion));
       const row = entry.row;
       return `
         <tr data-vendor-key="${escapeHtml(entry.key)}">
-          <td><span class="supplier-risk-badge risk-${entry.severity}">${audit ? severityLabel(entry.severity) : communicationSeverityLabel(entry.severity)}</span><strong class="supplier-risk-score">${entry.score}</strong></td>
+          <td><span class="supplier-risk-badge risk-${entry.severity}">${severityLabel(entry.severity)}</span><strong class="supplier-risk-score">${entry.score}</strong></td>
           <td>${escapeHtml(row.grp || '—')}</td>
           <td>${escapeHtml(row.sec || '—')}</td>
           <td><strong>${escapeHtml(row.vendorName || row.sup)}</strong><small>${escapeHtml(row.sup || '')}</small></td>
@@ -1242,16 +1333,15 @@ const SupplierPerformance = (() => {
 
   function exportExceptionsCsv() {
     if (!state.riskEntries.length) {
-      setMessage('目前沒有可匯出的異常清單。', 'error');
+      setMessage('目前沒有可匯出的問題清單。', 'error');
       return;
     }
-    const audit = state.viewMode === 'audit';
-    const headers = ['風險等級', '風險分數', 'Grp', 'Sec', 'Sup', 'Vendorname', 'YTD Sales', 'YTD GP%', 'YTD 總貢獻', audit ? '異常事項' : '顯著變動', audit ? '建議查核方向' : '建議補充資料'];
+    const headers = ['問題程度', '風險分數', 'Grp', 'Sec', 'Sup', 'Vendorname', 'YTD Sales', 'YTD GP%', 'YTD 總貢獻', '問題摘要', '建議釐清方向'];
     const rows = state.riskEntries.map(entry => {
-      const findings = entry.findings.map(item => audit ? item.auditLabel : item.communicationLabel).join('；');
-      const questions = unique(entry.findings.map(item => audit ? item.auditQuestion : item.communicationQuestion)).join('；');
+      const findings = entry.findings.map(item => item.auditLabel).join('；');
+      const questions = unique(entry.findings.map(item => item.auditQuestion)).join('；');
       return [
-        audit ? severityLabel(entry.severity) : communicationSeverityLabel(entry.severity),
+        severityLabel(entry.severity),
         entry.score,
         entry.row.grp,
         entry.row.sec,
@@ -1265,7 +1355,7 @@ const SupplierPerformance = (() => {
       ];
     });
     const csv = '\uFEFF' + [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
-    downloadBlob(csv, `供應商${audit ? '稽核異常' : '待說明事項'}_${state.selectedMonth}.csv`, 'text/csv;charset=utf-8');
+    downloadBlob(csv, `供應商問題清單_${state.selectedMonth}.csv`, 'text/csv;charset=utf-8');
   }
 
   function showQualityDetails(snapshot) {
@@ -1283,6 +1373,7 @@ const SupplierPerformance = (() => {
     state.selectedSec = '';
     state.selectedVendor = '';
     state.selectedDetailKey = '';
+    state.selectedIssueCategory = '';
     state.riskEntries = [];
     state.charts.forEach(chart => chart.destroy());
     state.charts.clear();
